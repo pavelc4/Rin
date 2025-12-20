@@ -1,23 +1,16 @@
-//! Demo binary to test Rin terminal emulator features
-//!
-//! Run with: cargo run --example demo
-
-use rin::{AnsiParser, Command, TerminalBuffer};
+use rin::{AnsiParser, TerminalBuffer};
 
 fn main() {
     println!("=== Rin Terminal Engine Demo ===\n");
 
-    // Create a small terminal buffer (40x10)
     let mut buffer = TerminalBuffer::new(40, 10);
     let mut parser = AnsiParser::new();
 
-    // Demo 1: Basic text
-    println!("📝 Demo 1: Basic Text");
+    println!("Demo 1: Basic Text");
     write_and_execute(&mut buffer, &mut parser, b"Hello, Rin Terminal!\n");
     print_buffer_state(&buffer);
 
-    // Demo 2: Colors (basic ANSI)
-    println!("\n🎨 Demo 2: Basic ANSI Colors");
+    println!("\nDemo 2: Basic ANSI Colors");
     write_and_execute(
         &mut buffer,
         &mut parser,
@@ -25,8 +18,7 @@ fn main() {
     );
     print_buffer_state(&buffer);
 
-    // Demo 3: 256 Color
-    println!("\n🌈 Demo 3: 256 Color Palette");
+    println!("\nDemo 3: 256 Color Palette");
     write_and_execute(
         &mut buffer,
         &mut parser,
@@ -34,8 +26,7 @@ fn main() {
     );
     print_buffer_state(&buffer);
 
-    // Demo 4: True Color (RGB)
-    println!("\n✨ Demo 4: True Color (24-bit RGB)");
+    println!("\nDemo 4: True Color (24-bit RGB)");
     write_and_execute(
         &mut buffer,
         &mut parser,
@@ -43,8 +34,7 @@ fn main() {
     );
     print_buffer_state(&buffer);
 
-    // Demo 5: Scrollback
-    println!("\n📜 Demo 5: Scrollback Buffer");
+    println!("\nDemo 5: Scrollback Buffer");
     buffer.clear();
     for i in 0..15 {
         let line = format!("Line {} of 15\n", i + 1);
@@ -54,51 +44,41 @@ fn main() {
     println!("  Lines written: 15");
     println!("  Scrollback: {} lines saved", buffer.scrollback_len());
 
-    // Demo 6: Alternate Screen
-    println!("\n🖥️  Demo 6: Alternate Screen Mode");
+    println!("\nDemo 6: Alternate Screen Mode");
     println!(
         "  Before enter: is_alternate = {}",
         buffer.is_alternate_screen()
     );
-
-    // Enter alternate screen
     write_and_execute(&mut buffer, &mut parser, b"\x1b[?1049h");
     println!(
         "  After enter:  is_alternate = {}",
         buffer.is_alternate_screen()
     );
-
-    // Write something in alternate
     write_and_execute(&mut buffer, &mut parser, b"In alternate screen!");
-
-    // Exit alternate screen
     write_and_execute(&mut buffer, &mut parser, b"\x1b[?1049l");
     println!(
         "  After exit:   is_alternate = {}",
         buffer.is_alternate_screen()
     );
 
-    // Demo 7: Dirty Tracking
-    println!("\n🔄 Demo 7: Dirty Region Tracking");
+    println!("\nDemo 7: Dirty Region Tracking");
     buffer.clear();
     let grid = buffer.grid();
     println!("  After clear: has_dirty = {}", grid.has_dirty_rows());
     println!("  Row 0 dirty: {}", grid.is_row_dirty(0));
     println!("  Row 5 dirty: {}", grid.is_row_dirty(5));
 
-    // Demo 8: Cursor Movement
-    println!("\n🎯 Demo 8: Cursor Control");
+    println!("\nDemo 8: Cursor Control");
     buffer.clear();
-    write_and_execute(&mut buffer, &mut parser, b"\x1b[5;10H"); // Move to row 5, col 10
+    write_and_execute(&mut buffer, &mut parser, b"\x1b[5;10H");
     let (x, y) = buffer.cursor_pos();
     println!("  ESC[5;10H -> cursor at ({}, {})", x, y);
 
-    write_and_execute(&mut buffer, &mut parser, b"\x1b[2A"); // Move up 2
+    write_and_execute(&mut buffer, &mut parser, b"\x1b[2A");
     let (x, y) = buffer.cursor_pos();
     println!("  ESC[2A    -> cursor at ({}, {})", x, y);
 
-    println!("\n✅ All demos completed!");
-    println!("\n💡 Tip: Check src/tests.rs for unit tests covering all features.");
+    println!("\nAll demos completed!");
 }
 
 fn write_and_execute(buffer: &mut TerminalBuffer, parser: &mut AnsiParser, data: &[u8]) {
@@ -112,7 +92,6 @@ fn print_buffer_state(buffer: &TerminalBuffer) {
     let (x, y) = buffer.cursor_pos();
     println!("  Cursor position: ({}, {})", x, y);
 
-    // Print first visible line (non-empty)
     let grid = buffer.grid();
     for row_idx in 0..grid.height() {
         if let Some(row) = grid.row(row_idx) {
