@@ -3,6 +3,9 @@ pub mod input;
 pub mod parser;
 pub mod renderer;
 
+#[cfg(test)]
+mod tests;
+
 pub use core::{Cell, CellStyle, Color, Grid, TerminalBuffer};
 pub use input::{InputHandler, Key, KeyEvent, Modifiers};
 pub use parser::{AnsiParser, Command, ParseResult};

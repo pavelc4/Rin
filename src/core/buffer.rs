@@ -2,6 +2,9 @@ use super::cell::{Cell, CellStyle};
 use super::grid::Grid;
 use crate::parser::Command;
 use anyhow::Result;
+use std::collections::VecDeque;
+
+const DEFAULT_SCROLLBACK_LIMIT: usize = 10_000;
 
 #[derive(Debug, Clone)]
 pub struct TerminalBuffer {
@@ -10,6 +13,19 @@ pub struct TerminalBuffer {
     cursor_y: usize,
     current_style: CellStyle,
     saved_cursor: Option<(usize, usize, CellStyle)>,
+    scrollback: VecDeque<Vec<Cell>>,
+    scrollback_limit: usize,
+    scroll_offset: usize,
+    alternate_state: Option<Box<AlternateState>>,
+}
+
+#[derive(Debug, Clone)]
+struct AlternateState {
+    grid: Grid,
+    cursor_x: usize,
+    cursor_y: usize,
+    current_style: CellStyle,
+    scrollback: VecDeque<Vec<Cell>>,
 }
 
 impl TerminalBuffer {
@@ -20,6 +36,10 @@ impl TerminalBuffer {
             cursor_y: 0,
             current_style: CellStyle::default(),
             saved_cursor: None,
+            scrollback: VecDeque::new(),
+            scrollback_limit: DEFAULT_SCROLLBACK_LIMIT,
+            scroll_offset: 0,
+            alternate_state: None,
         }
     }
 
@@ -33,6 +53,44 @@ impl TerminalBuffer {
 
     pub fn current_style(&self) -> CellStyle {
         self.current_style
+    }
+
+    pub fn scrollback_len(&self) -> usize {
+        self.scrollback.len()
+    }
+
+    pub fn scroll_offset(&self) -> usize {
+        self.scroll_offset
+    }
+
+    pub fn scroll_by(&mut self, delta: i32) {
+        let new_offset = (self.scroll_offset as i32 + delta)
+            .max(0)
+            .min(self.scrollback.len() as i32) as usize;
+        self.scroll_offset = new_offset;
+    }
+
+    pub fn scroll_to(&mut self, offset: usize) {
+        self.scroll_offset = offset.min(self.scrollback.len());
+    }
+
+    pub fn scroll_to_bottom(&mut self) {
+        self.scroll_offset = 0;
+    }
+
+    pub fn scrollback_row(&self, index: usize) -> Option<&[Cell]> {
+        self.scrollback.get(index).map(|v| v.as_slice())
+    }
+
+    pub fn set_scrollback_limit(&mut self, limit: usize) {
+        self.scrollback_limit = limit;
+        while self.scrollback.len() > limit {
+            self.scrollback.pop_front();
+        }
+    }
+
+    pub fn is_alternate_screen(&self) -> bool {
+        self.alternate_state.is_some()
     }
 
     pub fn write_char(&mut self, c: char) -> Result<()> {
@@ -57,6 +115,16 @@ impl TerminalBuffer {
         let width = self.grid.width();
         let height = self.grid.height();
 
+        for y in 0..n.min(height) {
+            if let Some(row) = self.grid.row(y) {
+                self.scrollback.push_back(row.to_vec());
+            }
+        }
+
+        while self.scrollback.len() > self.scrollback_limit {
+            self.scrollback.pop_front();
+        }
+
         for y in n..height {
             for x in 0..width {
                 if let Some(cell) = self.grid.get(x, y).cloned() {
@@ -71,7 +139,7 @@ impl TerminalBuffer {
             }
         }
 
-        self.cursor_y = self.cursor_y.saturating_sub(n).max(0);
+        self.cursor_y = self.cursor_y.saturating_sub(n);
     }
 
     fn scroll_down(&mut self, n: usize) {
@@ -207,6 +275,13 @@ impl TerminalBuffer {
                 self.current_style = CellStyle::default();
                 self.saved_cursor = None;
             }
+            Command::EnterAlternateScreen => {
+                self.enter_alternate_screen();
+            }
+            Command::ExitAlternateScreen => {
+                self.exit_alternate_screen();
+            }
+            Command::SetTitle(_title) => {}
         }
         Ok(())
     }
@@ -222,5 +297,36 @@ impl TerminalBuffer {
         self.grid.clear();
         self.cursor_x = 0;
         self.cursor_y = 0;
+    }
+    pub fn enter_alternate_screen(&mut self) {
+        if self.alternate_state.is_some() {
+            return;
+        }
+
+        let width = self.grid.width();
+        let height = self.grid.height();
+
+        let state = AlternateState {
+            grid: std::mem::replace(&mut self.grid, Grid::new(width, height)),
+            cursor_x: self.cursor_x,
+            cursor_y: self.cursor_y,
+            current_style: self.current_style,
+            scrollback: std::mem::take(&mut self.scrollback),
+        };
+
+        self.alternate_state = Some(Box::new(state));
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.current_style = CellStyle::default();
+    }
+
+    pub fn exit_alternate_screen(&mut self) {
+        if let Some(state) = self.alternate_state.take() {
+            self.grid = state.grid;
+            self.cursor_x = state.cursor_x;
+            self.cursor_y = state.cursor_y;
+            self.current_style = state.current_style;
+            self.scrollback = state.scrollback;
+        }
     }
 }

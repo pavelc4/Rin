@@ -21,6 +21,9 @@ pub enum Command {
     DeleteLine(usize),
     EraseChars(usize),
     Reset,
+    EnterAlternateScreen,
+    ExitAlternateScreen,
+    SetTitle(String),
 }
 
 pub type ParseResult = Vec<Command>;
@@ -84,32 +87,42 @@ impl Perform for AnsiPerformer {
 
     fn unhook(&mut self) {}
 
-    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
+    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        if let Some(cmd) = params.first() {
+            if *cmd == b"0" || *cmd == b"2" {
+                if let Some(title_bytes) = params.get(1) {
+                    if let Ok(title) = std::str::from_utf8(title_bytes) {
+                        self.commands.push(Command::SetTitle(title.to_string()));
+                    }
+                }
+            }
+        }
+    }
 
-    fn csi_dispatch(&mut self, params: &Params, _intermediates: &[u8], _ignore: bool, c: char) {
+    fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], _ignore: bool, c: char) {
+        if intermediates.first() == Some(&b'?') {
+            self.handle_private_mode(params, c);
+            return;
+        }
+
         match c {
             'A' => {
-                // Cursor up
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as i32;
                 self.commands.push(Command::MoveCursorRelative(0, -n));
             }
             'B' => {
-                // Cursor down
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as i32;
                 self.commands.push(Command::MoveCursorRelative(0, n));
             }
             'C' => {
-                // Cursor forward
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as i32;
                 self.commands.push(Command::MoveCursorRelative(n, 0));
             }
             'D' => {
-                // Cursor backward
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as i32;
                 self.commands.push(Command::MoveCursorRelative(-n, 0));
             }
             'H' | 'f' => {
-                // Cursor position
                 let mut iter = params.iter();
                 let y = iter
                     .next()
@@ -124,54 +137,35 @@ impl Perform for AnsiPerformer {
                 self.commands.push(Command::MoveCursor(x, y));
             }
             'J' => {
-                // Erase in display
                 let n = params.iter().next().and_then(|p| p.first()).unwrap_or(&0);
-                match n {
-                    2 => self.commands.push(Command::ClearScreen),
-                    _ => {}
+                if *n == 2 {
+                    self.commands.push(Command::ClearScreen);
                 }
             }
-            'K' => {
-                // Erase in line
-                self.commands.push(Command::ClearLine);
-            }
-            'm' => {
-                // SGR - Select Graphic Rendition
-                self.handle_sgr(params);
-            }
+            'K' => self.commands.push(Command::ClearLine),
+            'm' => self.handle_sgr(params),
             'L' => {
-                // Insert lines
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
                 self.commands.push(Command::InsertLine(n));
             }
             'M' => {
-                // Delete lines
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
                 self.commands.push(Command::DeleteLine(n));
             }
             'P' => {
-                // Delete characters
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
                 self.commands.push(Command::EraseChars(n));
             }
             'S' => {
-                // Scroll up
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
                 self.commands.push(Command::ScrollUp(n));
             }
             'T' => {
-                // Scroll down
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
                 self.commands.push(Command::ScrollDown(n));
             }
-            's' => {
-                // Save cursor
-                self.commands.push(Command::SaveCursor);
-            }
-            'u' => {
-                // Restore cursor
-                self.commands.push(Command::RestoreCursor);
-            }
+            's' => self.commands.push(Command::SaveCursor),
+            'u' => self.commands.push(Command::RestoreCursor),
             _ => {}
         }
     }
@@ -188,83 +182,102 @@ impl Perform for AnsiPerformer {
 }
 
 impl AnsiPerformer {
+    fn handle_private_mode(&mut self, params: &Params, c: char) {
+        let mode = params
+            .iter()
+            .next()
+            .and_then(|p| p.first())
+            .copied()
+            .unwrap_or(0);
+        match (mode, c) {
+            (1049, 'h') => self.commands.push(Command::EnterAlternateScreen),
+            (1049, 'l') => self.commands.push(Command::ExitAlternateScreen),
+            (47, 'h') | (1047, 'h') => self.commands.push(Command::EnterAlternateScreen),
+            (47, 'l') | (1047, 'l') => self.commands.push(Command::ExitAlternateScreen),
+            _ => {}
+        }
+    }
+
     fn handle_sgr(&mut self, params: &Params) {
         if params.is_empty() {
-            // Reset
             self.current_style = CellStyle::default();
             self.commands.push(Command::SetStyle(self.current_style));
             return;
         }
 
-        for param in params.iter() {
-            for &p in param {
-                match p {
-                    0 => {
-                        // Reset
-                        self.current_style = CellStyle::default();
-                    }
-                    1 => {
-                        // Bold
-                        self.current_style.bold = true;
-                    }
-                    3 => {
-                        // Italic
-                        self.current_style.italic = true;
-                    }
-                    4 => {
-                        // Underline
-                        self.current_style.underline = true;
-                    }
-                    7 => {
-                        // Reverse
-                        self.current_style.reverse = true;
-                    }
-                    22 => {
-                        // Not bold
-                        self.current_style.bold = false;
-                    }
-                    23 => {
-                        // Not italic
-                        self.current_style.italic = false;
-                    }
-                    24 => {
-                        // Not underlined
-                        self.current_style.underline = false;
-                    }
-                    27 => {
-                        // Not reversed
-                        self.current_style.reverse = false;
-                    }
-                    30..=37 => {
-                        // Foreground color
-                        let color = ansi_color(p - 30);
-                        self.current_style.fg = color;
-                        self.commands.push(Command::SetForeground(color));
-                    }
-                    40..=47 => {
-                        // Background color
-                        let color = ansi_color(p - 40);
-                        self.current_style.bg = color;
-                        self.commands.push(Command::SetBackground(color));
-                    }
-                    90..=97 => {
-                        // Bright foreground
-                        let color = ansi_bright_color(p - 90);
-                        self.current_style.fg = color;
-                        self.commands.push(Command::SetForeground(color));
-                    }
-                    100..=107 => {
-                        // Bright background
-                        let color = ansi_bright_color(p - 100);
-                        self.current_style.bg = color;
-                        self.commands.push(Command::SetBackground(color));
-                    }
-                    _ => {}
+        let flat: Vec<u16> = params.iter().flat_map(|p| p.iter().copied()).collect();
+        let mut i = 0;
+
+        while i < flat.len() {
+            let p = flat[i];
+            match p {
+                0 => self.current_style = CellStyle::default(),
+                1 => self.current_style.bold = true,
+                3 => self.current_style.italic = true,
+                4 => self.current_style.underline = true,
+                7 => self.current_style.reverse = true,
+                22 => self.current_style.bold = false,
+                23 => self.current_style.italic = false,
+                24 => self.current_style.underline = false,
+                27 => self.current_style.reverse = false,
+                30..=37 => {
+                    let color = ansi_color(p - 30);
+                    self.current_style.fg = color;
+                    self.commands.push(Command::SetForeground(color));
                 }
+                38 => {
+                    if let Some(color) = self.parse_extended_color(&flat, &mut i) {
+                        self.current_style.fg = color;
+                        self.commands.push(Command::SetForeground(color));
+                    }
+                }
+                39 => self.current_style.fg = Color::WHITE, // Default fg
+                40..=47 => {
+                    let color = ansi_color(p - 40);
+                    self.current_style.bg = color;
+                    self.commands.push(Command::SetBackground(color));
+                }
+                48 => {
+                    if let Some(color) = self.parse_extended_color(&flat, &mut i) {
+                        self.current_style.bg = color;
+                        self.commands.push(Command::SetBackground(color));
+                    }
+                }
+                49 => self.current_style.bg = Color::BLACK,
+                90..=97 => {
+                    let color = ansi_bright_color(p - 90);
+                    self.current_style.fg = color;
+                    self.commands.push(Command::SetForeground(color));
+                }
+                100..=107 => {
+                    let color = ansi_bright_color(p - 100);
+                    self.current_style.bg = color;
+                    self.commands.push(Command::SetBackground(color));
+                }
+                _ => {}
             }
+            i += 1;
         }
 
         self.commands.push(Command::SetStyle(self.current_style));
+    }
+    fn parse_extended_color(&self, params: &[u16], i: &mut usize) -> Option<Color> {
+        let mode = params.get(*i + 1)?;
+        match *mode {
+            5 => {
+                let n = *params.get(*i + 2)? as u8;
+                *i += 2;
+                Some(color_256(n))
+            }
+            2 => {
+                let r = *params.get(*i + 2)? as u8;
+                let g = *params.get(*i + 3)? as u8;
+                let b = *params.get(*i + 4)? as u8;
+                *i += 4;
+                Some(Color::new(r, g, b))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -293,5 +306,29 @@ fn ansi_bright_color(n: u16) -> Color {
         6 => Color::new(41, 184, 219),  // Bright Cyan
         7 => Color::new(255, 255, 255), // Bright White
         _ => Color::WHITE,
+    }
+}
+
+fn color_256(n: u8) -> Color {
+    match n {
+        0..=15 => {
+            if n < 8 {
+                ansi_color(n as u16)
+            } else {
+                ansi_bright_color((n - 8) as u16)
+            }
+        }
+        16..=231 => {
+            let n = n - 16;
+            let r = (n / 36) % 6;
+            let g = (n / 6) % 6;
+            let b = n % 6;
+            let to_rgb = |v: u8| if v == 0 { 0 } else { 55 + v * 40 };
+            Color::new(to_rgb(r), to_rgb(g), to_rgb(b))
+        }
+        232..=255 => {
+            let gray = 8 + (n - 232) * 10;
+            Color::new(gray, gray, gray)
+        }
     }
 }
