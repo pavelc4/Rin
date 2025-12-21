@@ -44,9 +44,7 @@ impl AnsiParser {
     pub fn parse(&mut self, data: &[u8]) -> Result<ParseResult> {
         self.performer.commands.clear();
 
-        for &byte in data {
-            self.parser.advance(&mut self.performer, byte);
-        }
+        self.parser.advance(&mut self.performer, data);
 
         Ok(self.performer.commands.clone())
     }

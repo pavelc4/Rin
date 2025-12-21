@@ -2,7 +2,6 @@
 name = "rin"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
 
 [lib]
 crate-type = ["lib", "cdylib", "staticlib"]
@@ -10,20 +9,26 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [dependencies]
 anyhow = "1.0"
 thiserror = "2.0"
-vte = "0.13"
+vte = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Optional features
 tokio = { version = "1.48", features = ["sync", "rt"], optional = true }
+portable-pty = { version = "0.9", optional = true }
 
 [features]
 default = []
 async = ["tokio"]
 android = []
+pty = ["portable-pty"]
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+[[example]]
+name = "shell"
+required-features = ["pty"]

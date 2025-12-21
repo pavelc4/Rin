@@ -69,3 +69,9 @@ impl TerminalEngine {
 
 #[cfg(feature = "android")]
 pub mod android;
+
+#[cfg(feature = "pty")]
+pub mod pty;
+
+#[cfg(feature = "pty")]
+pub use pty::Pty;
