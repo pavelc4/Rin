@@ -1,6 +1,23 @@
 use crate::core::{CellStyle, Color};
 use anyhow::Result;
 use vte::{Params, Parser, Perform};
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CursorStyle {
+    #[default]
+    BlinkBlock,
+    SteadyBlock,
+    BlinkUnderline,
+    SteadyUnderline,
+    BlinkBar,
+    SteadyBar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Charset {
+    #[default]
+    Ascii,
+    LineDrawing,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
@@ -24,6 +41,13 @@ pub enum Command {
     EnterAlternateScreen,
     ExitAlternateScreen,
     SetTitle(String),
+    SetCursorStyle(CursorStyle),
+    SetBracketedPaste(bool),
+    SetCharset(Charset),
+    SetTabStop,
+    ClearTabStop,
+    ClearAllTabStops,
+    DeviceAttributeQuery,
 }
 
 pub type ParseResult = Vec<Command>;
@@ -164,16 +188,55 @@ impl Perform for AnsiPerformer {
             }
             's' => self.commands.push(Command::SaveCursor),
             'u' => self.commands.push(Command::RestoreCursor),
+            'g' => {
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&0);
+                match n {
+                    0 => self.commands.push(Command::ClearTabStop),
+                    3 => self.commands.push(Command::ClearAllTabStops),
+                    _ => {}
+                }
+            }
+            'q' if intermediates.first() == Some(&b' ') => {
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&0);
+                let style = match n {
+                    0 | 1 => CursorStyle::BlinkBlock,
+                    2 => CursorStyle::SteadyBlock,
+                    3 => CursorStyle::BlinkUnderline,
+                    4 => CursorStyle::SteadyUnderline,
+                    5 => CursorStyle::BlinkBar,
+                    6 => CursorStyle::SteadyBar,
+                    _ => CursorStyle::BlinkBlock,
+                };
+                self.commands.push(Command::SetCursorStyle(style));
+            }
+            'c' => {
+                self.commands.push(Command::DeviceAttributeQuery);
+            }
             _ => {}
         }
     }
 
-    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {
-        match byte {
-            b'c' => {
-                // Reset
-                self.commands.push(Command::Reset);
+    fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
+        if let Some(&intermediate) = intermediates.first() {
+            match (intermediate, byte) {
+                (b'(', b'0') => {
+                    self.commands
+                        .push(Command::SetCharset(Charset::LineDrawing));
+                    return;
+                }
+                (b'(', b'B') => {
+                    self.commands.push(Command::SetCharset(Charset::Ascii));
+                    return;
+                }
+                _ => {}
             }
+        }
+
+        match byte {
+            b'c' => self.commands.push(Command::Reset),
+            b'7' => self.commands.push(Command::SaveCursor), // DECSC
+            b'8' => self.commands.push(Command::RestoreCursor), // DECRC
+            b'H' => self.commands.push(Command::SetTabStop), // HTS
             _ => {}
         }
     }
@@ -192,6 +255,8 @@ impl AnsiPerformer {
             (1049, 'l') => self.commands.push(Command::ExitAlternateScreen),
             (47, 'h') | (1047, 'h') => self.commands.push(Command::EnterAlternateScreen),
             (47, 'l') | (1047, 'l') => self.commands.push(Command::ExitAlternateScreen),
+            (2004, 'h') => self.commands.push(Command::SetBracketedPaste(true)),
+            (2004, 'l') => self.commands.push(Command::SetBracketedPaste(false)),
             _ => {}
         }
     }

@@ -57,6 +57,9 @@ fn main() {
                         let _ = buffer.execute_command(cmd);
                     }
                 }
+                for response in buffer.drain_responses() {
+                    let _ = pty.write(&response);
+                }
             }
             Err(_) => {
                 thread::sleep(Duration::from_millis(10));

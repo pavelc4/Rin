@@ -1,6 +1,6 @@
 use super::cell::{Cell, CellStyle};
 use super::grid::Grid;
-use crate::parser::Command;
+use crate::parser::{Charset, Command, CursorStyle};
 use anyhow::Result;
 use std::collections::VecDeque;
 
@@ -17,6 +17,11 @@ pub struct TerminalBuffer {
     scrollback_limit: usize,
     scroll_offset: usize,
     alternate_state: Option<Box<AlternateState>>,
+    cursor_style: CursorStyle,
+    bracketed_paste: bool,
+    charset: Charset,
+    tab_stops: Vec<bool>,
+    pending_responses: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +35,11 @@ struct AlternateState {
 
 impl TerminalBuffer {
     pub fn new(width: usize, height: usize) -> Self {
+        let mut tab_stops = vec![false; width];
+        for i in (8..width).step_by(8) {
+            tab_stops[i] = true;
+        }
+
         Self {
             grid: Grid::new(width, height),
             cursor_x: 0,
@@ -40,6 +50,11 @@ impl TerminalBuffer {
             scrollback_limit: DEFAULT_SCROLLBACK_LIMIT,
             scroll_offset: 0,
             alternate_state: None,
+            cursor_style: CursorStyle::default(),
+            bracketed_paste: false,
+            charset: Charset::default(),
+            tab_stops,
+            pending_responses: Vec::new(),
         }
     }
 
@@ -93,9 +108,48 @@ impl TerminalBuffer {
         self.alternate_state.is_some()
     }
 
+    pub fn cursor_style(&self) -> CursorStyle {
+        self.cursor_style
+    }
+
+    pub fn is_bracketed_paste(&self) -> bool {
+        self.bracketed_paste
+    }
+
+    pub fn charset(&self) -> Charset {
+        self.charset
+    }
+
+    pub fn drain_responses(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.pending_responses)
+    }
+
+    fn translate_char(&self, c: char) -> char {
+        if self.charset == Charset::LineDrawing {
+            match c {
+                'j' => '┘',
+                'k' => '┐',
+                'l' => '┌',
+                'm' => '└',
+                'n' => '┼',
+                'q' => '─',
+                't' => '├',
+                'u' => '┤',
+                'v' => '┴',
+                'w' => '┬',
+                'x' => '│',
+                'a' => '▒',
+                _ => c,
+            }
+        } else {
+            c
+        }
+    }
+
     pub fn write_char(&mut self, c: char) -> Result<()> {
+        let translated = self.translate_char(c);
         if let Some(cell) = self.grid.get_mut(self.cursor_x, self.cursor_y) {
-            cell.character = c;
+            cell.character = translated;
             cell.style = self.current_style;
         }
 
@@ -109,6 +163,17 @@ impl TerminalBuffer {
         }
 
         Ok(())
+    }
+
+    fn advance_to_next_tab_stop(&mut self) {
+        let width = self.grid.width();
+        for x in (self.cursor_x + 1)..width {
+            if self.tab_stops.get(x).copied().unwrap_or(false) {
+                self.cursor_x = x;
+                return;
+            }
+        }
+        self.cursor_x = width.saturating_sub(1);
     }
 
     fn scroll_up(&mut self, n: usize) {
@@ -173,15 +238,7 @@ impl TerminalBuffer {
                 } else if c == '\r' {
                     self.cursor_x = 0;
                 } else if c == '\t' {
-                    let tab_stop = 8;
-                    self.cursor_x = ((self.cursor_x / tab_stop) + 1) * tab_stop;
-                    if self.cursor_x >= self.grid.width() {
-                        self.cursor_x = 0;
-                        self.cursor_y += 1;
-                        if self.cursor_y >= self.grid.height() {
-                            self.scroll_up(1);
-                        }
-                    }
+                    self.advance_to_next_tab_stop();
                 } else {
                     self.write_char(c)?;
                 }
@@ -282,6 +339,31 @@ impl TerminalBuffer {
                 self.exit_alternate_screen();
             }
             Command::SetTitle(_title) => {}
+            Command::SetCursorStyle(style) => {
+                self.cursor_style = style;
+            }
+            Command::SetBracketedPaste(enabled) => {
+                self.bracketed_paste = enabled;
+            }
+            Command::SetCharset(charset) => {
+                self.charset = charset;
+            }
+            Command::SetTabStop => {
+                if self.cursor_x < self.tab_stops.len() {
+                    self.tab_stops[self.cursor_x] = true;
+                }
+            }
+            Command::ClearTabStop => {
+                if self.cursor_x < self.tab_stops.len() {
+                    self.tab_stops[self.cursor_x] = false;
+                }
+            }
+            Command::ClearAllTabStops => {
+                self.tab_stops.fill(false);
+            }
+            Command::DeviceAttributeQuery => {
+                self.pending_responses.push(b"\x1b[?1;2c".to_vec());
+            }
         }
         Ok(())
     }

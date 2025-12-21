@@ -213,3 +213,98 @@ mod parser_tests {
         assert!(has_red, "Should parse basic red color");
     }
 }
+
+#[cfg(test)]
+mod priority_feature_tests {
+    use crate::parser::{AnsiParser, Charset, Command, CursorStyle};
+
+    #[test]
+    fn test_parse_decsc_decrc() {
+        let mut parser = AnsiParser::new();
+
+        let cmds = parser.parse(b"\x1b7").unwrap();
+        assert!(
+            cmds.contains(&Command::SaveCursor),
+            "Should parse ESC 7 as SaveCursor"
+        );
+        let cmds = parser.parse(b"\x1b8").unwrap();
+        assert!(
+            cmds.contains(&Command::RestoreCursor),
+            "Should parse ESC 8 as RestoreCursor"
+        );
+    }
+
+    #[test]
+    fn test_parse_cursor_style() {
+        let mut parser = AnsiParser::new();
+
+        let cmds = parser.parse(b"\x1b[2 q").unwrap();
+        assert!(
+            cmds.contains(&Command::SetCursorStyle(CursorStyle::SteadyBlock)),
+            "Should parse CSI 2 SP q as SteadyBlock"
+        );
+
+        let cmds = parser.parse(b"\x1b[5 q").unwrap();
+        assert!(
+            cmds.contains(&Command::SetCursorStyle(CursorStyle::BlinkBar)),
+            "Should parse CSI 5 SP q as BlinkBar"
+        );
+    }
+
+    #[test]
+    fn test_parse_bracketed_paste() {
+        let mut parser = AnsiParser::new();
+
+        let cmds = parser.parse(b"\x1b[?2004h").unwrap();
+        assert!(
+            cmds.contains(&Command::SetBracketedPaste(true)),
+            "Should parse ?2004h as enable bracketed paste"
+        );
+
+        let cmds = parser.parse(b"\x1b[?2004l").unwrap();
+        assert!(
+            cmds.contains(&Command::SetBracketedPaste(false)),
+            "Should parse ?2004l as disable bracketed paste"
+        );
+    }
+
+    #[test]
+    fn test_parse_line_drawing_charset() {
+        let mut parser = AnsiParser::new();
+
+        let cmds = parser.parse(b"\x1b(0").unwrap();
+        assert!(
+            cmds.contains(&Command::SetCharset(Charset::LineDrawing)),
+            "Should parse ESC (0 as LineDrawing charset"
+        );
+
+        let cmds = parser.parse(b"\x1b(B").unwrap();
+        assert!(
+            cmds.contains(&Command::SetCharset(Charset::Ascii)),
+            "Should parse ESC (B as Ascii charset"
+        );
+    }
+
+    #[test]
+    fn test_parse_tab_stop_commands() {
+        let mut parser = AnsiParser::new();
+
+        let cmds = parser.parse(b"\x1bH").unwrap();
+        assert!(
+            cmds.contains(&Command::SetTabStop),
+            "Should parse ESC H as SetTabStop"
+        );
+
+        let cmds = parser.parse(b"\x1b[0g").unwrap();
+        assert!(
+            cmds.contains(&Command::ClearTabStop),
+            "Should parse CSI 0g as ClearTabStop"
+        );
+
+        let cmds = parser.parse(b"\x1b[3g").unwrap();
+        assert!(
+            cmds.contains(&Command::ClearAllTabStops),
+            "Should parse CSI 3g as ClearAllTabStops"
+        );
+    }
+}

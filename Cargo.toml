@@ -13,15 +13,16 @@ vte = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Optional features
 tokio = { version = "1.48", features = ["sync", "rt"], optional = true }
 portable-pty = { version = "0.9", optional = true }
+crossterm = { version = "0.29", optional = true }
 
 [features]
 default = []
 async = ["tokio"]
 android = []
 pty = ["portable-pty"]
+crossterm = ["dep:crossterm"]
 
 [profile.release]
 opt-level = 3
@@ -32,3 +33,7 @@ strip = true
 [[example]]
 name = "shell"
 required-features = ["pty"]
+
+[[example]]
+name = "tui"
+required-features = ["pty", "crossterm"]

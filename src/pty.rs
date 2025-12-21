@@ -43,6 +43,11 @@ impl Pty {
         })
     }
 
+    pub fn take_reader(&mut self) -> Result<Box<dyn std::io::Read + Send>> {
+        let reader = std::mem::replace(&mut self.reader, Box::new(std::io::empty()));
+        Ok(reader)
+    }
+
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.reader.read(buf).context("PTY read failed")
     }
