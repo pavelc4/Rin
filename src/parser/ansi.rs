@@ -61,6 +61,8 @@ pub enum Command {
     Bell,
     CursorPositionReport,
     SetFocusEvents(bool),
+    SetOriginMode(bool),
+    SetAutoWrapMode(bool),
 }
 
 /// Mouse tracking modes
@@ -363,6 +365,12 @@ impl AnsiPerformer {
             // Focus events
             (1004, 'h') => self.commands.push(Command::SetFocusEvents(true)),
             (1004, 'l') => self.commands.push(Command::SetFocusEvents(false)),
+            // Origin Mode (DECOM)
+            (6, 'h') => self.commands.push(Command::SetOriginMode(true)),
+            (6, 'l') => self.commands.push(Command::SetOriginMode(false)),
+            // Auto-Wrap Mode (DECAWM)
+            (7, 'h') => self.commands.push(Command::SetAutoWrapMode(true)),
+            (7, 'l') => self.commands.push(Command::SetAutoWrapMode(false)),
             _ => {}
         }
     }

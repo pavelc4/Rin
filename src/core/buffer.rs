@@ -26,6 +26,8 @@ pub struct TerminalBuffer {
     scroll_region: Option<(usize, usize)>,
     mouse_mode: MouseMode,
     focus_events: bool,
+    origin_mode: bool,
+    auto_wrap_mode: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -63,6 +65,8 @@ impl TerminalBuffer {
             scroll_region: None,
             mouse_mode: MouseMode::None,
             focus_events: false,
+            origin_mode: false,
+            auto_wrap_mode: true,
         }
     }
 
@@ -206,11 +210,16 @@ impl TerminalBuffer {
         }
 
         // Handle line wrap
+        // Handle line wrap
         if self.cursor_x >= self.grid.width() {
-            self.cursor_x = 0;
-            self.cursor_y += 1;
-            if self.cursor_y >= self.grid.height() {
-                self.scroll_up(1);
+            if self.auto_wrap_mode {
+                self.cursor_x = 0;
+                self.cursor_y += 1;
+                if self.cursor_y >= self.grid.height() {
+                    self.scroll_up(1);
+                }
+            } else {
+                self.cursor_x = self.grid.width().saturating_sub(1);
             }
         }
 
@@ -316,8 +325,20 @@ impl TerminalBuffer {
                 _ => {}
             },
             Command::MoveCursor(x, y) => {
-                self.cursor_x = x.min(self.grid.width() - 1);
-                self.cursor_y = y.min(self.grid.height() - 1);
+                let (top, bottom) = if self.origin_mode {
+                    self.scroll_region
+                        .map(|(t, b)| (t, b))
+                        .unwrap_or((0, self.grid.height().saturating_sub(1)))
+                } else {
+                    (0, self.grid.height().saturating_sub(1))
+                };
+
+                let real_y = if self.origin_mode { top + y } else { y };
+
+                self.cursor_x = x.min(self.grid.width().saturating_sub(1));
+                self.cursor_y = real_y
+                    .clamp(top, bottom)
+                    .min(self.grid.height().saturating_sub(1));
             }
             Command::MoveCursorRelative(dx, dy) => {
                 self.cursor_x = (self.cursor_x as i32 + dx)
@@ -532,6 +553,19 @@ impl TerminalBuffer {
                 // Store focus event reporting state
                 // The actual focus in/out is sent by the UI layer
                 self.focus_events = enabled;
+            }
+            Command::SetOriginMode(enabled) => {
+                self.origin_mode = enabled;
+                // DECOM also moves cursor to home position
+                self.cursor_x = 0;
+                self.cursor_y = if self.origin_mode {
+                    self.scroll_region.map(|(top, _)| top).unwrap_or(0)
+                } else {
+                    0
+                };
+            }
+            Command::SetAutoWrapMode(enabled) => {
+                self.auto_wrap_mode = enabled;
             }
         }
         Ok(())
