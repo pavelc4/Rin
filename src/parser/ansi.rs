@@ -37,6 +37,8 @@ pub enum Command {
     InsertLine(usize),
     DeleteLine(usize),
     EraseChars(usize),
+    EraseDisplay(u8),
+    EraseLine(u8),
     Reset,
     EnterAlternateScreen,
     ExitAlternateScreen,
@@ -48,6 +50,8 @@ pub enum Command {
     ClearTabStop,
     ClearAllTabStops,
     DeviceAttributeQuery,
+    ShowCursor,
+    HideCursor,
 }
 
 pub type ParseResult = Vec<Command>;
@@ -159,12 +163,17 @@ impl Perform for AnsiPerformer {
                 self.commands.push(Command::MoveCursor(x, y));
             }
             'J' => {
-                let n = params.iter().next().and_then(|p| p.first()).unwrap_or(&0);
-                if *n == 2 {
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&0) as u8;
+                if n == 2 {
                     self.commands.push(Command::ClearScreen);
+                } else {
+                    self.commands.push(Command::EraseDisplay(n));
                 }
             }
-            'K' => self.commands.push(Command::ClearLine),
+            'K' => {
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&0) as u8;
+                self.commands.push(Command::EraseLine(n));
+            }
             'm' => self.handle_sgr(params),
             'L' => {
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
@@ -257,6 +266,8 @@ impl AnsiPerformer {
             (47, 'l') | (1047, 'l') => self.commands.push(Command::ExitAlternateScreen),
             (2004, 'h') => self.commands.push(Command::SetBracketedPaste(true)),
             (2004, 'l') => self.commands.push(Command::SetBracketedPaste(false)),
+            (25, 'h') => self.commands.push(Command::ShowCursor),
+            (25, 'l') => self.commands.push(Command::HideCursor),
             _ => {}
         }
     }
@@ -294,7 +305,10 @@ impl AnsiPerformer {
                         self.commands.push(Command::SetForeground(color));
                     }
                 }
-                39 => self.current_style.fg = Color::WHITE, // Default fg
+                39 => {
+                    self.current_style.fg = Color::WHITE;
+                    self.commands.push(Command::SetForeground(Color::WHITE));
+                }
                 40..=47 => {
                     let color = ansi_color(p - 40);
                     self.current_style.bg = color;
@@ -306,7 +320,10 @@ impl AnsiPerformer {
                         self.commands.push(Command::SetBackground(color));
                     }
                 }
-                49 => self.current_style.bg = Color::BLACK,
+                49 => {
+                    self.current_style.bg = Color::BLACK;
+                    self.commands.push(Command::SetBackground(Color::BLACK));
+                }
                 90..=97 => {
                     let color = ansi_bright_color(p - 90);
                     self.current_style.fg = color;

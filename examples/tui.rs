@@ -133,8 +133,18 @@ fn render_buffer(
                 if x >= width {
                     break;
                 }
-                let fg = to_crossterm_color(cell.style.fg);
-                let bg = to_crossterm_color(cell.style.bg);
+                // Handle reverse video
+                let (fg, bg) = if cell.style.reverse {
+                    (
+                        to_crossterm_color(cell.style.bg),
+                        to_crossterm_color(cell.style.fg),
+                    )
+                } else {
+                    (
+                        to_crossterm_color(cell.style.fg),
+                        to_crossterm_color(cell.style.bg),
+                    )
+                };
 
                 execute!(
                     stdout,

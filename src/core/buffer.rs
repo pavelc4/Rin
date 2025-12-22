@@ -285,6 +285,54 @@ impl TerminalBuffer {
                     let _ = self.grid.set(x, self.cursor_y, Cell::default());
                 }
             }
+            Command::EraseDisplay(mode) => {
+                let width = self.grid.width();
+                let height = self.grid.height();
+                match mode {
+                    0 => {
+                        for x in self.cursor_x..width {
+                            let _ = self.grid.set(x, self.cursor_y, Cell::default());
+                        }
+                        for y in (self.cursor_y + 1)..height {
+                            for x in 0..width {
+                                let _ = self.grid.set(x, y, Cell::default());
+                            }
+                        }
+                    }
+                    1 => {
+                        for y in 0..self.cursor_y {
+                            for x in 0..width {
+                                let _ = self.grid.set(x, y, Cell::default());
+                            }
+                        }
+                        for x in 0..=self.cursor_x.min(width.saturating_sub(1)) {
+                            let _ = self.grid.set(x, self.cursor_y, Cell::default());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Command::EraseLine(mode) => {
+                let width = self.grid.width();
+                match mode {
+                    0 => {
+                        for x in self.cursor_x..width {
+                            let _ = self.grid.set(x, self.cursor_y, Cell::default());
+                        }
+                    }
+                    1 => {
+                        for x in 0..=self.cursor_x.min(width.saturating_sub(1)) {
+                            let _ = self.grid.set(x, self.cursor_y, Cell::default());
+                        }
+                    }
+                    2 => {
+                        for x in 0..width {
+                            let _ = self.grid.set(x, self.cursor_y, Cell::default());
+                        }
+                    }
+                    _ => {}
+                }
+            }
             Command::SetStyle(style) => {
                 self.current_style = style;
             }
@@ -361,6 +409,7 @@ impl TerminalBuffer {
             Command::ClearAllTabStops => {
                 self.tab_stops.fill(false);
             }
+            Command::ShowCursor | Command::HideCursor => {}
             Command::DeviceAttributeQuery => {
                 self.pending_responses.push(b"\x1b[?1;2c".to_vec());
             }
