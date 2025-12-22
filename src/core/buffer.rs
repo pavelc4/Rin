@@ -157,11 +157,28 @@ impl TerminalBuffer {
     }
 
     pub fn write_char(&mut self, c: char) -> Result<()> {
+        // Check if this is a zero-width character (combining mark, variation selector, etc.)
+        let width = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+
+        if width == 0 && c != ' ' {
+            // Attach to previous cell (or current if at start of line)
+            let prev_x = if self.cursor_x > 0 {
+                self.cursor_x - 1
+            } else {
+                0
+            };
+            if let Some(cell) = self.grid.get_mut(prev_x, self.cursor_y) {
+                cell.push_zerowidth(c);
+            }
+            return Ok(());
+        }
+
         let translated = self.translate_char(c);
         if let Some(cell) = self.grid.get_mut(self.cursor_x, self.cursor_y) {
             cell.character = translated;
             cell.style = self.current_style;
             cell.hyperlink = self.current_hyperlink.clone();
+            cell.zerowidth.clear(); // Reset zerowidth on new character
         }
 
         self.cursor_x += 1;

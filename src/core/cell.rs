@@ -107,6 +107,9 @@ pub struct Cell {
     pub style: CellStyle,
     #[serde(skip)]
     pub hyperlink: Option<Hyperlink>,
+    /// Zero-width combining characters attached to this cell
+    #[serde(skip)]
+    pub zerowidth: Vec<char>,
 }
 
 impl Default for Cell {
@@ -115,6 +118,7 @@ impl Default for Cell {
             character: ' ',
             style: CellStyle::default(),
             hyperlink: None,
+            zerowidth: Vec::new(),
         }
     }
 }
@@ -125,7 +129,13 @@ impl Cell {
             character,
             style: CellStyle::default(),
             hyperlink: None,
+            zerowidth: Vec::new(),
         }
+    }
+
+    /// Push a zero-width character (combining char, emoji joiner, etc.)
+    pub fn push_zerowidth(&mut self, c: char) {
+        self.zerowidth.push(c);
     }
 
     pub fn with_style(mut self, style: CellStyle) -> Self {
