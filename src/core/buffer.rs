@@ -157,11 +157,11 @@ impl TerminalBuffer {
     }
 
     pub fn write_char(&mut self, c: char) -> Result<()> {
-        // Check if this is a zero-width character (combining mark, variation selector, etc.)
-        let width = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+        // Check character width
+        let char_width = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
 
-        if width == 0 && c != ' ' {
-            // Attach to previous cell (or current if at start of line)
+        // Zero-width: attach to previous cell
+        if char_width == 0 && c != ' ' {
             let prev_x = if self.cursor_x > 0 {
                 self.cursor_x - 1
             } else {
@@ -174,14 +174,32 @@ impl TerminalBuffer {
         }
 
         let translated = self.translate_char(c);
+        let is_wide = char_width == 2;
+
+        // Write the main character
         if let Some(cell) = self.grid.get_mut(self.cursor_x, self.cursor_y) {
             cell.character = translated;
             cell.style = self.current_style;
             cell.hyperlink = self.current_hyperlink.clone();
-            cell.zerowidth.clear(); // Reset zerowidth on new character
+            cell.zerowidth.clear();
+            cell.wide = is_wide;
+            cell.wide_spacer = false;
         }
 
         self.cursor_x += 1;
+
+        // For wide chars, add a spacer cell
+        if is_wide && self.cursor_x < self.grid.width() {
+            if let Some(cell) = self.grid.get_mut(self.cursor_x, self.cursor_y) {
+                cell.character = ' ';
+                cell.style = self.current_style;
+                cell.wide = false;
+                cell.wide_spacer = true;
+            }
+            self.cursor_x += 1;
+        }
+
+        // Handle line wrap
         if self.cursor_x >= self.grid.width() {
             self.cursor_x = 0;
             self.cursor_y += 1;

@@ -110,6 +110,10 @@ pub struct Cell {
     /// Zero-width combining characters attached to this cell
     #[serde(skip)]
     pub zerowidth: Vec<char>,
+    /// True if this is a wide (double-width) character
+    pub wide: bool,
+    /// True if this is a spacer cell following a wide character
+    pub wide_spacer: bool,
 }
 
 impl Default for Cell {
@@ -119,6 +123,8 @@ impl Default for Cell {
             style: CellStyle::default(),
             hyperlink: None,
             zerowidth: Vec::new(),
+            wide: false,
+            wide_spacer: false,
         }
     }
 }
@@ -130,6 +136,8 @@ impl Cell {
             style: CellStyle::default(),
             hyperlink: None,
             zerowidth: Vec::new(),
+            wide: false,
+            wide_spacer: false,
         }
     }
 
