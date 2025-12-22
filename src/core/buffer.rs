@@ -477,6 +477,46 @@ impl TerminalBuffer {
             Command::SetMouseMode(mode) => {
                 self.mouse_mode = mode;
             }
+            Command::InsertChars(n) => {
+                // Shift cells right from cursor, inserting blanks
+                let width = self.grid.width();
+                let y = self.cursor_y;
+                for x in (self.cursor_x..width).rev() {
+                    if x + n < width {
+                        if let Some(cell) = self.grid.get(x, y).cloned() {
+                            let _ = self.grid.set(x + n, y, cell);
+                        }
+                    }
+                }
+                // Fill with blanks
+                for x in self.cursor_x..self.cursor_x.saturating_add(n).min(width) {
+                    if let Some(cell) = self.grid.get_mut(x, y) {
+                        *cell = Cell::default();
+                        cell.style = self.current_style;
+                    }
+                }
+            }
+            Command::DeleteChars(n) => {
+                // Shift cells left from cursor, deleting n chars
+                let width = self.grid.width();
+                let y = self.cursor_y;
+                for x in self.cursor_x..width {
+                    if x + n < width {
+                        if let Some(cell) = self.grid.get(x + n, y).cloned() {
+                            let _ = self.grid.set(x, y, cell);
+                        }
+                    } else {
+                        if let Some(cell) = self.grid.get_mut(x, y) {
+                            *cell = Cell::default();
+                            cell.style = self.current_style;
+                        }
+                    }
+                }
+            }
+            Command::Bell => {
+                // Bell is typically handled by the UI (vibrate, sound, flash)
+                // Buffer stores it so UI can check for pending bells
+            }
         }
         Ok(())
     }

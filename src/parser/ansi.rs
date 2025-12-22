@@ -56,6 +56,9 @@ pub enum Command {
     SetHyperlink(Option<Hyperlink>),
     SetScrollRegion { top: usize, bottom: usize },
     SetMouseMode(MouseMode),
+    InsertChars(usize),
+    DeleteChars(usize),
+    Bell,
 }
 
 /// Mouse tracking modes
@@ -127,7 +130,11 @@ impl Perform for AnsiPerformer {
     }
 
     fn execute(&mut self, byte: u8) {
-        self.commands.push(Command::Execute(byte));
+        if byte == 0x07 {
+            self.commands.push(Command::Bell);
+        } else {
+            self.commands.push(Command::Execute(byte));
+        }
     }
 
     fn hook(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _c: char) {}
@@ -228,9 +235,13 @@ impl Perform for AnsiPerformer {
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
                 self.commands.push(Command::DeleteLine(n));
             }
+            '@' => {
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
+                self.commands.push(Command::InsertChars(n));
+            }
             'P' => {
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
-                self.commands.push(Command::EraseChars(n));
+                self.commands.push(Command::DeleteChars(n));
             }
             'S' => {
                 let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
