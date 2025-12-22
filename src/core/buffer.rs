@@ -23,6 +23,7 @@ pub struct TerminalBuffer {
     tab_stops: Vec<bool>,
     pending_responses: Vec<Vec<u8>>,
     current_hyperlink: Option<Hyperlink>,
+    scroll_region: Option<(usize, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +58,7 @@ impl TerminalBuffer {
             tab_stops,
             pending_responses: Vec::new(),
             current_hyperlink: None,
+            scroll_region: None,
         }
     }
 
@@ -418,6 +420,18 @@ impl TerminalBuffer {
             }
             Command::SetHyperlink(link) => {
                 self.current_hyperlink = link;
+            }
+            Command::SetScrollRegion { top, bottom } => {
+                let height = self.grid.height();
+                let actual_bottom = if bottom >= height { height - 1 } else { bottom };
+                if top < actual_bottom {
+                    self.scroll_region = Some((top, actual_bottom));
+                } else {
+                    self.scroll_region = None; // Reset to full screen
+                }
+                // DECSTBM also moves cursor to home
+                self.cursor_x = 0;
+                self.cursor_y = 0;
             }
         }
         Ok(())

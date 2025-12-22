@@ -54,6 +54,7 @@ pub enum Command {
     ShowCursor,
     HideCursor,
     SetHyperlink(Option<Hyperlink>),
+    SetScrollRegion { top: usize, bottom: usize },
 }
 
 pub type ParseResult = Vec<Command>;
@@ -244,6 +245,21 @@ impl Perform for AnsiPerformer {
             }
             'c' => {
                 self.commands.push(Command::DeviceAttributeQuery);
+            }
+            'r' => {
+                // DECSTBM - Set Top and Bottom Margins
+                let mut iter = params.iter();
+                let top = iter.next().and_then(|p| p.first().copied()).unwrap_or(1) as usize;
+                let bottom = iter.next().and_then(|p| p.first().copied()).unwrap_or(0) as usize;
+                // top/bottom are 1-indexed; 0 for bottom means use screen height
+                self.commands.push(Command::SetScrollRegion {
+                    top: top.saturating_sub(1),
+                    bottom: if bottom == 0 {
+                        usize::MAX
+                    } else {
+                        bottom.saturating_sub(1)
+                    },
+                });
             }
             _ => {}
         }
