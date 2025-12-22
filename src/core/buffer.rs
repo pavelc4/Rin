@@ -28,6 +28,7 @@ pub struct TerminalBuffer {
     focus_events: bool,
     origin_mode: bool,
     auto_wrap_mode: bool,
+    pending_clipboard: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +68,7 @@ impl TerminalBuffer {
             focus_events: false,
             origin_mode: false,
             auto_wrap_mode: true,
+            pending_clipboard: Vec::new(),
         }
     }
 
@@ -138,6 +140,10 @@ impl TerminalBuffer {
 
     pub fn focus_events_enabled(&self) -> bool {
         self.focus_events
+    }
+
+    pub fn drain_content_clipboard(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_clipboard)
     }
 
     pub fn drain_responses(&mut self) -> Vec<Vec<u8>> {
@@ -566,6 +572,9 @@ impl TerminalBuffer {
             }
             Command::SetAutoWrapMode(enabled) => {
                 self.auto_wrap_mode = enabled;
+            }
+            Command::CopyToClipboard(content) => {
+                self.pending_clipboard.push(content);
             }
         }
         Ok(())

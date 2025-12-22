@@ -63,6 +63,7 @@ pub enum Command {
     SetFocusEvents(bool),
     SetOriginMode(bool),
     SetAutoWrapMode(bool),
+    CopyToClipboard(String),
 }
 
 /// Mouse tracking modes
@@ -173,6 +174,14 @@ impl Perform for AnsiPerformer {
                             });
                             let link = Hyperlink::new(id, uri.to_string());
                             self.commands.push(Command::SetHyperlink(Some(link)));
+                        }
+                    }
+                }
+                b"52" => {
+                    if let Some(data_bytes) = params.get(2) {
+                        if let Ok(data) = std::str::from_utf8(data_bytes) {
+                            self.commands
+                                .push(Command::CopyToClipboard(data.to_string()));
                         }
                     }
                 }
