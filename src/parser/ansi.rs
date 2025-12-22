@@ -444,6 +444,12 @@ impl AnsiPerformer {
                     self.current_style.bg = Color::BLACK;
                     self.commands.push(Command::SetBackground(Color::BLACK));
                 }
+                58 => {
+                    if let Some(color) = self.parse_extended_color(&flat, &mut i) {
+                        self.current_style.underline_color = Some(color);
+                    }
+                }
+                59 => self.current_style.underline_color = None,
                 90..=97 => {
                     let color = ansi_bright_color(p - 90);
                     self.current_style.fg = color;
