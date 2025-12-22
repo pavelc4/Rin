@@ -67,6 +67,9 @@ pub struct CellStyle {
     pub italic: bool,
     pub underline: bool,
     pub reverse: bool,
+    pub strikethrough: bool,
+    pub dim: bool,
+    pub hidden: bool,
 }
 
 impl Default for CellStyle {
@@ -78,6 +81,9 @@ impl Default for CellStyle {
             italic: false,
             underline: false,
             reverse: false,
+            strikethrough: false,
+            dim: false,
+            hidden: false,
         }
     }
 }
