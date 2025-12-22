@@ -1,4 +1,4 @@
-use crate::core::{CellStyle, Color};
+use crate::core::{CellStyle, Color, Hyperlink};
 use anyhow::Result;
 use vte::{Params, Parser, Perform};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -52,6 +52,7 @@ pub enum Command {
     DeviceAttributeQuery,
     ShowCursor,
     HideCursor,
+    SetHyperlink(Option<Hyperlink>),
 }
 
 pub type ParseResult = Vec<Command>;
@@ -115,12 +116,34 @@ impl Perform for AnsiPerformer {
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         if let Some(cmd) = params.first() {
-            if *cmd == b"0" || *cmd == b"2" {
-                if let Some(title_bytes) = params.get(1) {
-                    if let Ok(title) = std::str::from_utf8(title_bytes) {
-                        self.commands.push(Command::SetTitle(title.to_string()));
+            match *cmd {
+                b"0" | b"2" => {
+                    if let Some(title_bytes) = params.get(1) {
+                        if let Ok(title) = std::str::from_utf8(title_bytes) {
+                            self.commands.push(Command::SetTitle(title.to_string()));
+                        }
                     }
                 }
+                b"8" => {
+                    // OSC 8 hyperlink: params[1] = id/params, params[2] = URI
+                    let uri = params.get(2).and_then(|b| std::str::from_utf8(b).ok());
+                    if let Some(uri) = uri {
+                        if uri.is_empty() {
+                            // Empty URI = clear hyperlink
+                            self.commands.push(Command::SetHyperlink(None));
+                        } else {
+                            // Parse id from params[1] (format: id=VALUE;...)
+                            let id = params.get(1).and_then(|b| {
+                                std::str::from_utf8(b).ok().and_then(|s| {
+                                    s.split(';').find_map(|kv| kv.strip_prefix("id="))
+                                })
+                            });
+                            let link = Hyperlink::new(id, uri.to_string());
+                            self.commands.push(Command::SetHyperlink(Some(link)));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }

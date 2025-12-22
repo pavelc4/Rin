@@ -1,4 +1,4 @@
-use super::cell::{Cell, CellStyle};
+use super::cell::{Cell, CellStyle, Hyperlink};
 use super::grid::Grid;
 use crate::parser::{Charset, Command, CursorStyle};
 use anyhow::Result;
@@ -22,6 +22,7 @@ pub struct TerminalBuffer {
     charset: Charset,
     tab_stops: Vec<bool>,
     pending_responses: Vec<Vec<u8>>,
+    current_hyperlink: Option<Hyperlink>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +56,7 @@ impl TerminalBuffer {
             charset: Charset::default(),
             tab_stops,
             pending_responses: Vec::new(),
+            current_hyperlink: None,
         }
     }
 
@@ -151,6 +153,7 @@ impl TerminalBuffer {
         if let Some(cell) = self.grid.get_mut(self.cursor_x, self.cursor_y) {
             cell.character = translated;
             cell.style = self.current_style;
+            cell.hyperlink = self.current_hyperlink.clone();
         }
 
         self.cursor_x += 1;
@@ -412,6 +415,9 @@ impl TerminalBuffer {
             Command::ShowCursor | Command::HideCursor => {}
             Command::DeviceAttributeQuery => {
                 self.pending_responses.push(b"\x1b[?1;2c".to_vec());
+            }
+            Command::SetHyperlink(link) => {
+                self.current_hyperlink = link;
             }
         }
         Ok(())
