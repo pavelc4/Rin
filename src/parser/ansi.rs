@@ -59,6 +59,8 @@ pub enum Command {
     InsertChars(usize),
     DeleteChars(usize),
     Bell,
+    CursorPositionReport,
+    SetFocusEvents(bool),
 }
 
 /// Mouse tracking modes
@@ -277,6 +279,12 @@ impl Perform for AnsiPerformer {
             'c' => {
                 self.commands.push(Command::DeviceAttributeQuery);
             }
+            'n' => {
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&0);
+                if n == 6 {
+                    self.commands.push(Command::CursorPositionReport);
+                }
+            }
             'r' => {
                 // DECSTBM - Set Top and Bottom Margins
                 let mut iter = params.iter();
@@ -352,6 +360,9 @@ impl AnsiPerformer {
             (9, 'l') | (1000, 'l') | (1002, 'l') | (1003, 'l') => {
                 self.commands.push(Command::SetMouseMode(MouseMode::None))
             }
+            // Focus events
+            (1004, 'h') => self.commands.push(Command::SetFocusEvents(true)),
+            (1004, 'l') => self.commands.push(Command::SetFocusEvents(false)),
             _ => {}
         }
     }

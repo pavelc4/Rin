@@ -25,6 +25,7 @@ pub struct TerminalBuffer {
     current_hyperlink: Option<Hyperlink>,
     scroll_region: Option<(usize, usize)>,
     mouse_mode: MouseMode,
+    focus_events: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +62,7 @@ impl TerminalBuffer {
             current_hyperlink: None,
             scroll_region: None,
             mouse_mode: MouseMode::None,
+            focus_events: false,
         }
     }
 
@@ -128,6 +130,10 @@ impl TerminalBuffer {
 
     pub fn mouse_mode(&self) -> MouseMode {
         self.mouse_mode
+    }
+
+    pub fn focus_events_enabled(&self) -> bool {
+        self.focus_events
     }
 
     pub fn drain_responses(&mut self) -> Vec<Vec<u8>> {
@@ -516,6 +522,16 @@ impl TerminalBuffer {
             Command::Bell => {
                 // Bell is typically handled by the UI (vibrate, sound, flash)
                 // Buffer stores it so UI can check for pending bells
+            }
+            Command::CursorPositionReport => {
+                // Send cursor position as \x1b[row;colR (1-indexed)
+                let response = format!("\x1b[{};{}R", self.cursor_y + 1, self.cursor_x + 1);
+                self.pending_responses.push(response.into_bytes());
+            }
+            Command::SetFocusEvents(enabled) => {
+                // Store focus event reporting state
+                // The actual focus in/out is sent by the UI layer
+                self.focus_events = enabled;
             }
         }
         Ok(())
