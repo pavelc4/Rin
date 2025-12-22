@@ -55,6 +55,26 @@ pub enum Command {
     HideCursor,
     SetHyperlink(Option<Hyperlink>),
     SetScrollRegion { top: usize, bottom: usize },
+    SetMouseMode(MouseMode),
+}
+
+/// Mouse tracking modes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MouseMode {
+    #[default]
+    None,
+    ReportClick,  // Mode 9 or 1000
+    ReportMotion, // Mode 1002
+    ReportAll,    // Mode 1003
+}
+
+/// Mouse encoding format
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MouseEncoding {
+    #[default]
+    X10, // Default
+    Utf8, // Mode 1005
+    Sgr,  // Mode 1006
 }
 
 pub type ParseResult = Vec<Command>;
@@ -308,6 +328,19 @@ impl AnsiPerformer {
             (2004, 'l') => self.commands.push(Command::SetBracketedPaste(false)),
             (25, 'h') => self.commands.push(Command::ShowCursor),
             (25, 'l') => self.commands.push(Command::HideCursor),
+            // Mouse modes
+            (9, 'h') | (1000, 'h') => self
+                .commands
+                .push(Command::SetMouseMode(MouseMode::ReportClick)),
+            (1002, 'h') => self
+                .commands
+                .push(Command::SetMouseMode(MouseMode::ReportMotion)),
+            (1003, 'h') => self
+                .commands
+                .push(Command::SetMouseMode(MouseMode::ReportAll)),
+            (9, 'l') | (1000, 'l') | (1002, 'l') | (1003, 'l') => {
+                self.commands.push(Command::SetMouseMode(MouseMode::None))
+            }
             _ => {}
         }
     }

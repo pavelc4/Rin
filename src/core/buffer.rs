@@ -1,6 +1,6 @@
 use super::cell::{Cell, CellStyle, Hyperlink};
 use super::grid::Grid;
-use crate::parser::{Charset, Command, CursorStyle};
+use crate::parser::{Charset, Command, CursorStyle, MouseMode};
 use anyhow::Result;
 use std::collections::VecDeque;
 
@@ -24,6 +24,7 @@ pub struct TerminalBuffer {
     pending_responses: Vec<Vec<u8>>,
     current_hyperlink: Option<Hyperlink>,
     scroll_region: Option<(usize, usize)>,
+    mouse_mode: MouseMode,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +60,7 @@ impl TerminalBuffer {
             pending_responses: Vec::new(),
             current_hyperlink: None,
             scroll_region: None,
+            mouse_mode: MouseMode::None,
         }
     }
 
@@ -122,6 +124,10 @@ impl TerminalBuffer {
 
     pub fn charset(&self) -> Charset {
         self.charset
+    }
+
+    pub fn mouse_mode(&self) -> MouseMode {
+        self.mouse_mode
     }
 
     pub fn drain_responses(&mut self) -> Vec<Vec<u8>> {
@@ -432,6 +438,9 @@ impl TerminalBuffer {
                 // DECSTBM also moves cursor to home
                 self.cursor_x = 0;
                 self.cursor_y = 0;
+            }
+            Command::SetMouseMode(mode) => {
+                self.mouse_mode = mode;
             }
         }
         Ok(())
