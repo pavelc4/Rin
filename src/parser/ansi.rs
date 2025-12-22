@@ -1,3 +1,4 @@
+use crate::core::cell::UnderlineStyle;
 use crate::core::{CellStyle, Color, Hyperlink};
 use anyhow::Result;
 use vte::{Params, Parser, Perform};
@@ -312,7 +313,24 @@ impl AnsiPerformer {
                 1 => self.current_style.bold = true,
                 2 => self.current_style.dim = true,
                 3 => self.current_style.italic = true,
-                4 => self.current_style.underline = true,
+                4 => {
+                    // Check for SGR 4:x subparam
+                    if i + 1 < flat.len() && flat[i + 1] <= 5 {
+                        let sub = flat[i + 1];
+                        self.current_style.underline = match sub {
+                            0 => UnderlineStyle::None,
+                            1 => UnderlineStyle::Single,
+                            2 => UnderlineStyle::Double,
+                            3 => UnderlineStyle::Curly,
+                            4 => UnderlineStyle::Dotted,
+                            5 => UnderlineStyle::Dashed,
+                            _ => UnderlineStyle::Single,
+                        };
+                        i += 1;
+                    } else {
+                        self.current_style.underline = UnderlineStyle::Single;
+                    }
+                }
                 7 => self.current_style.reverse = true,
                 8 => self.current_style.hidden = true,
                 9 => self.current_style.strikethrough = true,
@@ -321,7 +339,7 @@ impl AnsiPerformer {
                     self.current_style.dim = false;
                 }
                 23 => self.current_style.italic = false,
-                24 => self.current_style.underline = false,
+                24 => self.current_style.underline = UnderlineStyle::None,
                 27 => self.current_style.reverse = false,
                 28 => self.current_style.hidden = false,
                 29 => self.current_style.strikethrough = false,

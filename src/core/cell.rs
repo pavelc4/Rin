@@ -58,6 +58,18 @@ impl Hyperlink {
     }
 }
 
+/// Underline style variants
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum UnderlineStyle {
+    #[default]
+    None,
+    Single,
+    Double,
+    Curly,
+    Dotted,
+    Dashed,
+}
+
 /// Cell style attributes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CellStyle {
@@ -65,7 +77,7 @@ pub struct CellStyle {
     pub bg: Color,
     pub bold: bool,
     pub italic: bool,
-    pub underline: bool,
+    pub underline: UnderlineStyle,
     pub reverse: bool,
     pub strikethrough: bool,
     pub dim: bool,
@@ -79,7 +91,7 @@ impl Default for CellStyle {
             bg: Color::BLACK,
             bold: false,
             italic: false,
-            underline: false,
+            underline: UnderlineStyle::None,
             reverse: false,
             strikethrough: false,
             dim: false,
