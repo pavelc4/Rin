@@ -34,6 +34,7 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
     height: jint,
     font_size: f32,
     home_dir: JString,
+    username: JString,
 ) -> jlong {
     #[cfg(feature = "android")]
     android_logger::init_once(
@@ -47,11 +48,17 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
         .map(|s| s.into())
         .unwrap_or_default();
 
+    let username_str: String = env
+        .get_string(&username)
+        .map(|s| s.into())
+        .unwrap_or_else(|_| "user".to_string());
+
     log::info!(
-        "Creating Engine: {}x{}, HOME={}",
+        "Creating Engine: {}x{}, HOME={}, USER={}",
         width,
         height,
-        home_dir_str
+        home_dir_str,
+        username_str
     );
 
     // 1. Create Renderer & Engine
@@ -82,12 +89,13 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
         let _ = engine_guard.write(banner.as_bytes());
     }
 
-    // 3. Spawn PTY with home directory
+    // 3. Spawn PTY with home directory and username
     let pty = match Pty::spawn(
         "/system/bin/sh",
         width as u16,
         height as u16,
         Some(&home_dir_str),
+        Some(&username_str),
     ) {
         Ok(pty) => Arc::new(Mutex::new(pty)),
         Err(e) => {

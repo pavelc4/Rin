@@ -10,7 +10,13 @@ pub struct Pty {
 }
 
 impl Pty {
-    pub fn spawn(shell: &str, cols: u16, rows: u16, home_dir: Option<&str>) -> Result<Self> {
+    pub fn spawn(
+        shell: &str,
+        cols: u16,
+        rows: u16,
+        home_dir: Option<&str>,
+        username: Option<&str>,
+    ) -> Result<Self> {
         let pty_system = native_pty_system();
 
         let size = PtySize {
@@ -28,6 +34,13 @@ impl Pty {
         if let Some(home) = home_dir {
             cmd.env("HOME", home);
             cmd.cwd(home);
+            // Set ENV for mksh to source .mkshrc
+            let mkshrc_path = format!("{}/.mkshrc", home);
+            cmd.env("ENV", &mkshrc_path);
+        }
+
+        if let Some(user) = username {
+            cmd.env("USER", user);
         }
 
         pair.slave
