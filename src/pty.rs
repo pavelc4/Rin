@@ -10,7 +10,7 @@ pub struct Pty {
 }
 
 impl Pty {
-    pub fn spawn(shell: &str, cols: u16, rows: u16) -> Result<Self> {
+    pub fn spawn(shell: &str, cols: u16, rows: u16, home_dir: Option<&str>) -> Result<Self> {
         let pty_system = native_pty_system();
 
         let size = PtySize {
@@ -24,6 +24,11 @@ impl Pty {
 
         let mut cmd = CommandBuilder::new(shell);
         cmd.env("TERM", "xterm-256color");
+
+        if let Some(home) = home_dir {
+            cmd.env("HOME", home);
+            cmd.cwd(home);
+        }
 
         pair.slave
             .spawn_command(cmd)

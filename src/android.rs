@@ -28,11 +28,12 @@ fn get_sessions() -> Arc<Mutex<HashMap<EngineHandle, AndroidSession>>> {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_rin_RinLib_createEngine(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     width: jint,
     height: jint,
     font_size: f32,
+    home_dir: JString,
 ) -> jlong {
     #[cfg(feature = "android")]
     android_logger::init_once(
@@ -41,7 +42,17 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
             .with_tag("RinNative"),
     );
 
-    log::info!("Creating Engine: {}x{}", width, height);
+    let home_dir_str: String = env
+        .get_string(&home_dir)
+        .map(|s| s.into())
+        .unwrap_or_default();
+
+    log::info!(
+        "Creating Engine: {}x{}, HOME={}",
+        width,
+        height,
+        home_dir_str
+    );
 
     // 1. Create Renderer & Engine
     let renderer = Box::new(AndroidRenderer::new(font_size));
@@ -71,8 +82,13 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
         let _ = engine_guard.write(banner.as_bytes());
     }
 
-    // 2. Spawn PTY
-    let pty = match Pty::spawn("/system/bin/sh", width as u16, height as u16) {
+    // 3. Spawn PTY with home directory
+    let pty = match Pty::spawn(
+        "/system/bin/sh",
+        width as u16,
+        height as u16,
+        Some(&home_dir_str),
+    ) {
         Ok(pty) => Arc::new(Mutex::new(pty)),
         Err(e) => {
             log::error!("Failed to spawn PTY: {}", e);

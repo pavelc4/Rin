@@ -5,7 +5,7 @@ object RinLib {
         System.loadLibrary("rin")
     }
 
-    external fun createEngine(width: Int, height: Int, fontSize: Float): Long
+    external fun createEngine(width: Int, height: Int, fontSize: Float, homeDir: String): Long
     external fun destroyEngine(handle: Long)
     external fun write(handle: Long, data: ByteArray): Int
     external fun render(handle: Long): Int

@@ -21,7 +21,8 @@ class MainActivity : ComponentActivity() {
             var engineHandle by remember { mutableLongStateOf(0L) }
 
             DisposableEffect(Unit) {
-                engineHandle = RinLib.createEngine(80, 24, 14.0f)
+                val homeDir = filesDir.resolve("home").also { it.mkdirs() }
+                engineHandle = RinLib.createEngine(80, 24, 14.0f, homeDir.absolutePath)
                 onDispose {
                     if (engineHandle != 0L) {
                         RinLib.destroyEngine(engineHandle)
