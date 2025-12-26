@@ -51,6 +51,26 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
         renderer,
     )));
 
+    // 2. Write startup banner
+    {
+        let mut engine_guard = engine.lock().unwrap();
+        let banner = concat!(
+            "\x1b[36m",
+            "  ____  _       \r\n",
+            " |  _ \\(_)_ __  \r\n",
+            " | |_) | | '_ \\ \r\n",
+            " |  _ <| | | | |\r\n",
+            " |_| \\_\\_|_| |_|\r\n",
+            "\x1b[0m\r\n",
+            " \x1b[90mTerminal v",
+            env!("CARGO_PKG_VERSION"),
+            "\x1b[0m\r\n",
+            " \x1b[90mgithub.com/pavelc4/Rin\x1b[0m\r\n",
+            "\r\n",
+        );
+        let _ = engine_guard.write(banner.as_bytes());
+    }
+
     // 2. Spawn PTY
     let pty = match Pty::spawn("/system/bin/sh", width as u16, height as u16) {
         Ok(pty) => Arc::new(Mutex::new(pty)),
