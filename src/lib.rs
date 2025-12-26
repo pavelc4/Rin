@@ -16,13 +16,13 @@ use anyhow::Result;
 pub struct TerminalEngine {
     buffer: TerminalBuffer,
     parser: AnsiParser,
-    renderer: Box<dyn Renderer>,
+    renderer: Box<dyn Renderer + Send>,
     width: usize,
     height: usize,
 }
 
 impl TerminalEngine {
-    pub fn new(width: usize, height: usize, renderer: Box<dyn Renderer>) -> Self {
+    pub fn new(width: usize, height: usize, renderer: Box<dyn Renderer + Send>) -> Self {
         Self {
             buffer: TerminalBuffer::new(width, height),
             parser: AnsiParser::new(),
@@ -70,8 +70,8 @@ impl TerminalEngine {
 #[cfg(feature = "android")]
 pub mod android;
 
-#[cfg(feature = "pty")]
+#[cfg(any(feature = "pty", feature = "android"))]
 pub mod pty;
 
-#[cfg(feature = "pty")]
+#[cfg(any(feature = "pty", feature = "android"))]
 pub use pty::Pty;

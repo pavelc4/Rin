@@ -1,2 +1,25 @@
 /target
 .zed
+# Android
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+*.ids
+*.hprof
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+features.html
+
+# Scripts
+build_android.sh
+run_android.sh
+
+# Android specific
+android/build/
+android/app/build/
+android/.gradle/
+android/app/src/main/jniLibs/
