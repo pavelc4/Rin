@@ -54,7 +54,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.2")
 
     // Core
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
 
     // Debug
