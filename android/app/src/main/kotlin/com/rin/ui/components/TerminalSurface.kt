@@ -25,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rin.RinLib
+import com.rin.ui.theme.TerminalColorScheme
+import com.rin.ui.theme.rememberTerminalColorScheme
 
 @Composable
 fun TerminalSurface(
@@ -35,6 +37,7 @@ fun TerminalSurface(
 ) {
     var fontSize by remember { mutableFloatStateOf(18f) }
     var ctrlState by remember { mutableStateOf(ctrlPressed) }
+    val colorScheme = rememberTerminalColorScheme()
     
     // Update ctrlState when prop changes
     DisposableEffect(ctrlPressed) {
@@ -49,6 +52,7 @@ fun TerminalSurface(
                 this.fontSize = fontSize
                 this.onInputCallback = onInput
                 this.ctrlPressedProvider = { ctrlState }
+                this.colorScheme = colorScheme
             }
         },
         modifier = modifier,
@@ -57,6 +61,7 @@ fun TerminalSurface(
             view.fontSize = fontSize
             view.onInputCallback = onInput
             view.ctrlPressedProvider = { ctrlState }
+            view.colorScheme = colorScheme
             view.invalidate()
         }
     )
@@ -71,6 +76,7 @@ private class TerminalCanvasView(context: Context) : View(context) {
         }
     var onInputCallback: (ByteArray) -> Unit = {}
     var ctrlPressedProvider: () -> Boolean = { false }
+    var colorScheme: TerminalColorScheme? = null
 
     private var cols = 80
     private var rows = 24
@@ -242,9 +248,60 @@ private class TerminalCanvasView(context: Context) : View(context) {
         }
     }
 
+    // Map RGB to ANSI color index (approximate match)
+    // Returns null for colors we don't want to theme (keep original)
+    private fun rgbToAnsiIndex(r: Int, g: Int, b: Int): Int? {
+        // Only map specific ANSI colors to Monet
+        // Keep white/gray colors as-is for visibility  
+        return when {
+            r == 0 && g == 0 && b == 0 -> 0                   // Black
+            r == 205 && g == 49 && b == 49 -> 1               // Red
+            r == 13 && g == 188 && b == 121 -> 2              // Green
+            r == 229 && g == 229 && b == 16 -> 3              // Yellow
+            r == 36 && g == 114 && b == 200 -> 4              // Blue
+            r == 188 && g == 63 && b == 188 -> 5              // Magenta
+            r == 17 && g == 168 && b == 205 -> 6              // Cyan
+            // Skip white (7) - keep original for visibility
+            r == 102 && g == 102 && b == 102 -> 8             // Bright Black (gray)
+            r == 241 && g == 76 && b == 76 -> 9               // Bright Red
+            r == 35 && g == 209 && b == 139 -> 10             // Bright Green
+            r == 245 && g == 245 && b == 67 -> 11             // Bright Yellow
+            r == 59 && g == 142 && b == 234 -> 12             // Bright Blue
+            r == 214 && g == 112 && b == 214 -> 13            // Bright Magenta
+            r == 41 && g == 184 && b == 219 -> 14             // Bright Cyan
+            // Skip bright white (15) - keep original for visibility
+            else -> null  // True color or unmatched, keep as-is
+        }
+    }
+
+    // Get Monet color for ANSI index
+    private fun getMonetColor(index: Int): Int {
+        val scheme = colorScheme ?: return Color.WHITE
+        return when (index) {
+            0 -> scheme.black
+            1 -> scheme.red
+            2 -> scheme.green
+            3 -> scheme.yellow
+            4 -> scheme.blue
+            5 -> scheme.magenta
+            6 -> scheme.cyan
+            7 -> scheme.white
+            8 -> scheme.brightBlack
+            9 -> scheme.brightRed
+            10 -> scheme.brightGreen
+            11 -> scheme.brightYellow
+            12 -> scheme.brightBlue
+            13 -> scheme.brightMagenta
+            14 -> scheme.brightCyan
+            15 -> scheme.brightWhite
+            else -> scheme.foreground
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(0xFF0D0D0D.toInt())
+        val scheme = colorScheme
+        canvas.drawColor(scheme?.background ?: 0xFF0D0D0D.toInt())
 
         if (engineHandle == 0L) return
 
@@ -264,7 +321,7 @@ private class TerminalCanvasView(context: Context) : View(context) {
             var xPos = 0
 
             for (cellStr in cells) {
-                val parts = cellStr.split("|")
+                val parts = cellStr.split("\t")
                 if (parts.size < 4) {
                     xPos++
                     continue
@@ -275,25 +332,24 @@ private class TerminalCanvasView(context: Context) : View(context) {
                 val bgParts = parts[2].split(",")
                 val flags = parts[3]
 
-                // Parse colors
-                val fgColor = if (fgParts.size == 3) {
-                    Color.rgb(
-                        fgParts[0].toIntOrNull() ?: 255,
-                        fgParts[1].toIntOrNull() ?: 255,
-                        fgParts[2].toIntOrNull() ?: 255
-                    )
-                } else Color.WHITE
+                // Parse RGB colors
+                val fgR = fgParts.getOrNull(0)?.toIntOrNull() ?: 255
+                val fgG = fgParts.getOrNull(1)?.toIntOrNull() ?: 255
+                val fgB = fgParts.getOrNull(2)?.toIntOrNull() ?: 255
+                val bgR = bgParts.getOrNull(0)?.toIntOrNull() ?: 0
+                val bgG = bgParts.getOrNull(1)?.toIntOrNull() ?: 0
+                val bgB = bgParts.getOrNull(2)?.toIntOrNull() ?: 0
 
-                val bgColor = if (bgParts.size == 3) {
-                    Color.rgb(
-                        bgParts[0].toIntOrNull() ?: 0,
-                        bgParts[1].toIntOrNull() ?: 0,
-                        bgParts[2].toIntOrNull() ?: 0
-                    )
-                } else 0xFF0D0D0D.toInt()
+                // Map to Monet colors if standard ANSI, otherwise use true color
+                val fgColor = rgbToAnsiIndex(fgR, fgG, fgB)?.let { getMonetColor(it) }
+                    ?: Color.rgb(fgR, fgG, fgB)
+                val bgColor = rgbToAnsiIndex(bgR, bgG, bgB)?.let { getMonetColor(it) }
+                    ?: Color.rgb(bgR, bgG, bgB)
 
-                // Draw background if not default black
-                if (bgColor != 0xFF000000.toInt() && bgColor != 0xFF0D0D0D.toInt()) {
+                val schemeBg = scheme?.background ?: 0xFF0D0D0D.toInt()
+
+                // Draw background if not default
+                if (bgColor != schemeBg && bgColor != Color.BLACK) {
                     bgPaint.color = bgColor
                     canvas.drawRect(
                         xPos * charWidth,
@@ -327,6 +383,10 @@ private class TerminalCanvasView(context: Context) : View(context) {
             }
         }
 
+        // Draw cursor with Monet primary color
+        cursorPaint.color = scheme?.cursor ?: Color.WHITE
+        cursorPaint.alpha = 180
+        
         val cx = RinLib.getCursorX(engineHandle)
         val cy = RinLib.getCursorY(engineHandle)
         if (cx < cols && cy < rows) {

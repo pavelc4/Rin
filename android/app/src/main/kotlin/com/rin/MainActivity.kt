@@ -4,12 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import com.rin.ui.screen.SetupScreen
 import com.rin.ui.screen.TerminalScreen
 import com.rin.ui.screen.getStoredUsername
@@ -25,6 +28,12 @@ class MainActivity : ComponentActivity() {
             var engineHandle by remember { mutableLongStateOf(0L) }
 
             RinTheme {
+                // Set status bar color to match Monet surface
+                val surfaceColor = MaterialTheme.colorScheme.surfaceContainerLowest.toArgb()
+                SideEffect {
+                    window.statusBarColor = surfaceColor
+                    window.navigationBarColor = surfaceColor
+                }
                 if (username == null) {
                     SetupScreen(
                         onComplete = { name ->

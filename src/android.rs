@@ -74,11 +74,16 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
         let mut engine_guard = engine.lock().unwrap();
         let banner = concat!(
             "\x1b[36m",
-            "  ____  _       \r\n",
-            " |  _ \\(_)_ __  \r\n",
-            " | |_) | | '_ \\ \r\n",
-            " |  _ <| | | | |\r\n",
-            " |_| \\_\\_|_| |_|\r\n",
+            r"  ____  _       ",
+            "\r\n",
+            r" |  _ \(_)_ __  ",
+            "\r\n",
+            r" | |_) | | '_ \ ",
+            "\r\n",
+            r" |  _ <| | | | |",
+            "\r\n",
+            r" |_| \_\_|_| |_|",
+            "\r\n",
             "\x1b[0m\r\n",
             " \x1b[90mTerminal v",
             env!("CARGO_PKG_VERSION"),
@@ -316,13 +321,13 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
                     (&style.fg, &style.bg)
                 };
 
-                // Format: char|fgR,fgG,fgB|bgR,bgG,bgB|flags
+                // Format: char\tfgR,fgG,fgB\tbgR,bgG,bgB\tflags (tab-separated)
                 result.push(cell.character);
-                result.push('|');
+                result.push('\t');
                 result.push_str(&format!("{},{},{}", fg.r, fg.g, fg.b));
-                result.push('|');
+                result.push('\t');
                 result.push_str(&format!("{},{},{}", bg.r, bg.g, bg.b));
-                result.push('|');
+                result.push('\t');
 
                 // Flags
                 if style.bold {
