@@ -28,8 +28,8 @@ class MainActivity : ComponentActivity() {
             var engineHandle by remember { mutableLongStateOf(0L) }
 
             RinTheme {
-                // Set status bar color to match Monet surface
-                val surfaceColor = MaterialTheme.colorScheme.surfaceContainerLowest.toArgb()
+                // Set status bar color to match Monet surface (Terminal background)
+                val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
                 SideEffect {
                     window.statusBarColor = surfaceColor
                     window.navigationBarColor = surfaceColor

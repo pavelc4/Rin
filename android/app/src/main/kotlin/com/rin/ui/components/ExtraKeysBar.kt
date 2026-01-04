@@ -60,7 +60,6 @@ fun ExtraKeysBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF1A1A1A))
             .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -116,7 +115,7 @@ private fun KeyRow(
                     contentColor = if (isActive)
                         MaterialTheme.colorScheme.onPrimary
                     else
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        MaterialTheme.colorScheme.primary
                 ),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {

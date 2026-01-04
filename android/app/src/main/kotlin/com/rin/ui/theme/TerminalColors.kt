@@ -38,37 +38,40 @@ val LocalTerminalColors = compositionLocalOf { createFallbackScheme() }
  * Creates a terminal color scheme from Material You dynamic colors
  */
 @Composable
-fun rememberTerminalColorScheme(): TerminalColorScheme {
+fun rememberTerminalColorScheme(
+    darkTheme: Boolean = androidx.compose.foundation.isSystemInDarkTheme()
+): TerminalColorScheme {
     val colorScheme = MaterialTheme.colorScheme
 
     return TerminalColorScheme(
-        // Background: surfaceContainerLowest for deep dark
-        background = colorScheme.surfaceContainerLowest.toArgb(),
+        // Background: surface (Monet tinted dark/light)
+        background = colorScheme.surface.toArgb(),
         // Foreground: onSurface
         foreground = colorScheme.onSurface.toArgb(),
         // Cursor: primary
         cursor = colorScheme.primary.toArgb(),
 
-        // ANSI colors mapped to Monet palette
-        // Normal colors - black uses darker variant, not background (so it's visible)
-        black = colorScheme.surfaceDim.toArgb(),
-        red = colorScheme.error.toArgb(),
-        green = colorScheme.tertiary.toArgb(),
-        yellow = colorScheme.primaryContainer.toArgb(),
-        blue = colorScheme.primary.toArgb(),
-        magenta = colorScheme.secondary.toArgb(),
-        cyan = colorScheme.tertiaryContainer.toArgb(),
-        white = colorScheme.onSurface.toArgb(),  // Light color for text
+        // ANSI colors - Adaptive Standard Palette
+        // Dark Mode: Standard bright Xterm colors
+        // Light Mode: Darker variants for readability on white background
+        black = if (darkTheme) 0xFF000000.toInt() else 0xFF000000.toInt(),
+        red = if (darkTheme) 0xFFF44336.toInt() else 0xFFD32F2F.toInt(),
+        green = if (darkTheme) 0xFF4CAF50.toInt() else 0xFF388E3C.toInt(),
+        yellow = if (darkTheme) 0xFFFFEB3B.toInt() else 0xFFFBC02D.toInt(),
+        blue = if (darkTheme) 0xFF2196F3.toInt() else 0xFF1976D2.toInt(),
+        magenta = if (darkTheme) 0xFF9C27B0.toInt() else 0xFF7B1FA2.toInt(),
+        cyan = colorScheme.primary.toArgb(), // Monet-themed "Rin" banner
+        white = if (darkTheme) 0xFFE0E0E0.toInt() else 0xFF424242.toInt(), // Light Grey vs Dark Grey
 
-        // Bright colors (using container/on variants for consistency)
-        brightBlack = colorScheme.outline.toArgb(),
-        brightRed = colorScheme.errorContainer.toArgb(),
-        brightGreen = colorScheme.tertiary.lighten(0.3f).toArgb(),
-        brightYellow = colorScheme.primary.lighten(0.3f).toArgb(),
-        brightBlue = colorScheme.primary.lighten(0.2f).toArgb(),
-        brightMagenta = colorScheme.secondary.lighten(0.2f).toArgb(),
-        brightCyan = colorScheme.tertiary.lighten(0.3f).toArgb(),
-        brightWhite = colorScheme.onSurface.toArgb(),  // Same as white, light text
+        // Bright colors
+        brightBlack = colorScheme.onSurfaceVariant.toArgb(), // Monet Grey for Banner/Comments
+        brightRed = if (darkTheme) 0xFFFF8A80.toInt() else 0xFFD32F2F.toInt(),
+        brightGreen = if (darkTheme) 0xFFB9F6CA.toInt() else 0xFF388E3C.toInt(),
+        brightYellow = if (darkTheme) 0xFFFFFF8D.toInt() else 0xFFFBC02D.toInt(),
+        brightBlue = if (darkTheme) 0xFF82B1FF.toInt() else 0xFF1976D2.toInt(),
+        brightMagenta = if (darkTheme) 0xFFEA80FC.toInt() else 0xFF7B1FA2.toInt(),
+        brightCyan = colorScheme.tertiary.toArgb(), // Monet varaint for bright cyan
+        brightWhite = if (darkTheme) 0xFFFFFFFF.toInt() else 0xFF212121.toInt(), // White vs Near Black
     )
 }
 

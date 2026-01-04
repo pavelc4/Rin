@@ -35,14 +35,25 @@ fun TerminalSurface(
     modifier: Modifier = Modifier,
     onInput: (ByteArray) -> Unit = {}
 ) {
-    var fontSize by remember { mutableFloatStateOf(18f) }
+    var fontSize by remember { mutableFloatStateOf(13f) } // Reduced from 18f
     var ctrlState by remember { mutableStateOf(ctrlPressed) }
+    var cursorVisible by remember { mutableStateOf(true) }
     val colorScheme = rememberTerminalColorScheme()
     
     // Update ctrlState when prop changes
     DisposableEffect(ctrlPressed) {
         ctrlState = ctrlPressed
         onDispose { }
+    }
+
+    // Cursor blinking effect
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            cursorVisible = true
+            kotlinx.coroutines.delay(500)
+            cursorVisible = false
+            kotlinx.coroutines.delay(500)
+        }
     }
 
     AndroidView(
@@ -52,6 +63,7 @@ fun TerminalSurface(
                 this.fontSize = fontSize
                 this.onInputCallback = onInput
                 this.ctrlPressedProvider = { ctrlState }
+                this.cursorVisibleProvider = { cursorVisible }
                 this.colorScheme = colorScheme
             }
         },
@@ -61,6 +73,7 @@ fun TerminalSurface(
             view.fontSize = fontSize
             view.onInputCallback = onInput
             view.ctrlPressedProvider = { ctrlState }
+            view.cursorVisibleProvider = { cursorVisible }
             view.colorScheme = colorScheme
             view.invalidate()
         }
@@ -76,6 +89,7 @@ private class TerminalCanvasView(context: Context) : View(context) {
         }
     var onInputCallback: (ByteArray) -> Unit = {}
     var ctrlPressedProvider: () -> Boolean = { false }
+    var cursorVisibleProvider: () -> Boolean = { true }
     var colorScheme: TerminalColorScheme? = null
 
     private var cols = 80
@@ -101,7 +115,7 @@ private class TerminalCanvasView(context: Context) : View(context) {
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             val newSize = fontSize * detector.scaleFactor
-            if (newSize in 10f..40f) {
+            if (newSize in 8f..30f) {
                 fontSize = newSize
                 handleResize()
                 invalidate()
@@ -249,28 +263,26 @@ private class TerminalCanvasView(context: Context) : View(context) {
     }
 
     // Map RGB to ANSI color index (approximate match)
-    // Returns null for colors we don't want to theme (keep original)
     private fun rgbToAnsiIndex(r: Int, g: Int, b: Int): Int? {
-        // Only map specific ANSI colors to Monet
-        // Keep white/gray colors as-is for visibility  
+        // Check for standard ANSI colors as defined in Rust ansi.rs
         return when {
-            r == 0 && g == 0 && b == 0 -> 0                   // Black
-            r == 205 && g == 49 && b == 49 -> 1               // Red
-            r == 13 && g == 188 && b == 121 -> 2              // Green
-            r == 229 && g == 229 && b == 16 -> 3              // Yellow
-            r == 36 && g == 114 && b == 200 -> 4              // Blue
-            r == 188 && g == 63 && b == 188 -> 5              // Magenta
-            r == 17 && g == 168 && b == 205 -> 6              // Cyan
-            // Skip white (7) - keep original for visibility
-            r == 102 && g == 102 && b == 102 -> 8             // Bright Black (gray)
-            r == 241 && g == 76 && b == 76 -> 9               // Bright Red
-            r == 35 && g == 209 && b == 139 -> 10             // Bright Green
-            r == 245 && g == 245 && b == 67 -> 11             // Bright Yellow
-            r == 59 && g == 142 && b == 234 -> 12             // Bright Blue
-            r == 214 && g == 112 && b == 214 -> 13            // Bright Magenta
-            r == 41 && g == 184 && b == 219 -> 14             // Bright Cyan
-            // Skip bright white (15) - keep original for visibility
-            else -> null  // True color or unmatched, keep as-is
+            r == 0 && g == 0 && b == 0 -> 0         // Black
+            r == 205 && g == 49 && b == 49 -> 1     // Red
+            r == 13 && g == 188 && b == 121 -> 2    // Green
+            r == 229 && g == 229 && b == 16 -> 3    // Yellow
+            r == 36 && g == 114 && b == 200 -> 4    // Blue
+            r == 188 && g == 63 && b == 188 -> 5    // Magenta
+            r == 17 && g == 168 && b == 205 -> 6    // Cyan
+            r == 229 && g == 229 && b == 229 -> 7   // White
+            r == 102 && g == 102 && b == 102 -> 8   // Bright Black
+            r == 241 && g == 76 && b == 76 -> 9     // Bright Red
+            r == 35 && g == 209 && b == 139 -> 10   // Bright Green
+            r == 245 && g == 245 && b == 67 -> 11   // Bright Yellow
+            r == 59 && g == 142 && b == 234 -> 12   // Bright Blue
+            r == 214 && g == 112 && b == 214 -> 13  // Bright Magenta
+            r == 41 && g == 184 && b == 219 -> 14   // Bright Cyan
+            r == 255 && g == 255 && b == 255 -> 15  // Bright White
+            else -> null // True color, keep as-is
         }
     }
 
@@ -383,20 +395,24 @@ private class TerminalCanvasView(context: Context) : View(context) {
             }
         }
 
-        // Draw cursor with Monet primary color
-        cursorPaint.color = scheme?.cursor ?: Color.WHITE
-        cursorPaint.alpha = 180
-        
-        val cx = RinLib.getCursorX(engineHandle)
-        val cy = RinLib.getCursorY(engineHandle)
-        if (cx < cols && cy < rows) {
-            canvas.drawRect(
-                cx * charWidth,
-                cy * lineHeight,
-                (cx + 1) * charWidth,
-                (cy + 1) * lineHeight,
-                cursorPaint
-            )
+        // Draw cursor with Monet primary color (only if visible)
+        if (cursorVisibleProvider()) {
+            cursorPaint.color = scheme?.cursor ?: Color.WHITE
+            cursorPaint.alpha = 255 // Solid opacity for thin bar
+            
+            val cx = RinLib.getCursorX(engineHandle)
+            val cy = RinLib.getCursorY(engineHandle)
+            if (cx < cols && cy < rows) {
+                // Draw blinking bar cursor (thin vertical line)
+                val cursorWidth = charWidth / 5 // Make it thin relative to char width
+                canvas.drawRect(
+                    cx * charWidth,
+                    cy * lineHeight,
+                    cx * charWidth + cursorWidth,
+                    (cy + 1) * lineHeight,
+                    cursorPaint
+                )
+            }
         }
     }
 }
