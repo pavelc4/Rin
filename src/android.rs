@@ -287,3 +287,63 @@ pub extern "system" fn Java_com_rin_RinLib_getCursorY(
         0
     }
 }
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    handle: jlong,
+    y: jint,
+) -> JString<'local> {
+    let sessions_arc = get_sessions();
+    let sessions = sessions_arc.lock().unwrap();
+    if let Some(session) = sessions.get(&handle) {
+        let engine = session.engine.lock().unwrap();
+        let buffer = engine.buffer();
+        let grid = buffer.grid();
+        if let Some(row) = grid.row(y as usize) {
+            let mut result = String::with_capacity(row.len() * 32);
+            for cell in row.iter() {
+                // Skip wide spacer cells
+                if cell.wide_spacer {
+                    continue;
+                }
+
+                let style = &cell.style;
+                let (fg, bg) = if style.reverse {
+                    (&style.bg, &style.fg)
+                } else {
+                    (&style.fg, &style.bg)
+                };
+
+                // Format: char|fgR,fgG,fgB|bgR,bgG,bgB|flags
+                result.push(cell.character);
+                result.push('|');
+                result.push_str(&format!("{},{},{}", fg.r, fg.g, fg.b));
+                result.push('|');
+                result.push_str(&format!("{},{},{}", bg.r, bg.g, bg.b));
+                result.push('|');
+
+                // Flags
+                if style.bold {
+                    result.push('b');
+                }
+                if style.italic {
+                    result.push('i');
+                }
+                if style.dim {
+                    result.push('d');
+                }
+                if cell.wide {
+                    result.push('w');
+                }
+
+                result.push('\n');
+            }
+            return env
+                .new_string(result)
+                .unwrap_or_else(|_| env.new_string("").unwrap());
+        }
+    }
+    env.new_string("").unwrap()
+}

@@ -248,20 +248,85 @@ private class TerminalCanvasView(context: Context) : View(context) {
 
         if (engineHandle == 0L) return
 
-        // Draw text
+        val bgPaint = Paint()
+        val fgPaint = Paint().apply {
+            typeface = Typeface.MONOSPACE
+            isAntiAlias = true
+            textSize = textPaint.textSize
+        }
+
+        // Draw cells with colors
         for (y in 0 until rows) {
-            val line = RinLib.getLine(engineHandle, y)
-            if (line.isNotEmpty()) {
-                canvas.drawText(
-                    line,
-                    0f,
-                    (y + 1) * lineHeight - textPaint.descent(),
-                    textPaint
-                )
+            val cellData = RinLib.getCellData(engineHandle, y)
+            if (cellData.isEmpty()) continue
+
+            val cells = cellData.split("\n").filter { it.isNotEmpty() }
+            var xPos = 0
+
+            for (cellStr in cells) {
+                val parts = cellStr.split("|")
+                if (parts.size < 4) {
+                    xPos++
+                    continue
+                }
+
+                val char = parts[0]
+                val fgParts = parts[1].split(",")
+                val bgParts = parts[2].split(",")
+                val flags = parts[3]
+
+                // Parse colors
+                val fgColor = if (fgParts.size == 3) {
+                    Color.rgb(
+                        fgParts[0].toIntOrNull() ?: 255,
+                        fgParts[1].toIntOrNull() ?: 255,
+                        fgParts[2].toIntOrNull() ?: 255
+                    )
+                } else Color.WHITE
+
+                val bgColor = if (bgParts.size == 3) {
+                    Color.rgb(
+                        bgParts[0].toIntOrNull() ?: 0,
+                        bgParts[1].toIntOrNull() ?: 0,
+                        bgParts[2].toIntOrNull() ?: 0
+                    )
+                } else 0xFF0D0D0D.toInt()
+
+                // Draw background if not default black
+                if (bgColor != 0xFF000000.toInt() && bgColor != 0xFF0D0D0D.toInt()) {
+                    bgPaint.color = bgColor
+                    canvas.drawRect(
+                        xPos * charWidth,
+                        y * lineHeight,
+                        (xPos + 1) * charWidth,
+                        (y + 1) * lineHeight,
+                        bgPaint
+                    )
+                }
+
+                // Apply text styles
+                fgPaint.color = fgColor
+                fgPaint.isFakeBoldText = flags.contains('b')
+                fgPaint.textSkewX = if (flags.contains('i')) -0.25f else 0f
+                if (flags.contains('d')) {
+                    fgPaint.alpha = 150
+                } else {
+                    fgPaint.alpha = 255
+                }
+
+                // Draw character
+                if (char.isNotEmpty() && char != " ") {
+                    canvas.drawText(
+                        char,
+                        xPos * charWidth,
+                        (y + 1) * lineHeight - fgPaint.descent(),
+                        fgPaint
+                    )
+                }
+                xPos += if (flags.contains('w')) 2 else 1
             }
         }
 
-        // Draw cursor
         val cx = RinLib.getCursorX(engineHandle)
         val cy = RinLib.getCursorY(engineHandle)
         if (cx < cols && cy < rows) {
