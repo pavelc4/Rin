@@ -14,4 +14,6 @@ object RinLib {
     external fun getCursorX(handle: Long): Int
     external fun getCursorY(handle: Long): Int
     external fun getCellData(handle: Long, y: Int): String
+    external fun hasDirtyRows(handle: Long): Boolean
+    external fun clearDirty(handle: Long)
 }

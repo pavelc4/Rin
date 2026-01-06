@@ -134,13 +134,17 @@ private class TerminalCanvasView(context: Context) : View(context) {
         isFocusableInTouchMode = true
         updatePaint()
         
-        // Auto-refresh
+        // Smart refresh: only invalidate when terminal has dirty data
         postDelayed(object : Runnable {
             override fun run() {
-                invalidate()
-                postDelayed(this, 16)
+                // Check if terminal has new content to render
+                if (engineHandle != 0L && RinLib.hasDirtyRows(engineHandle)) {
+                    invalidate()
+                }
+                // Also invalidate for cursor blink (at lower rate)
+                postDelayed(this, 32) // ~30fps check rate, saves battery vs 60fps
             }
-        }, 16)
+        }, 32)
     }
 
     private fun updatePaint() {
@@ -414,6 +418,11 @@ private class TerminalCanvasView(context: Context) : View(context) {
                     cursorPaint
                 )
             }
+        }
+
+        // Clear dirty flags after rendering
+        if (engineHandle != 0L) {
+            RinLib.clearDirty(engineHandle)
         }
     }
 }

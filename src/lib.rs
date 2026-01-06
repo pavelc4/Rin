@@ -62,6 +62,10 @@ impl TerminalEngine {
         &self.buffer
     }
 
+    pub fn buffer_mut(&mut self) -> &mut TerminalBuffer {
+        &mut self.buffer
+    }
+
     pub fn clear(&mut self) {
         self.buffer.clear();
     }

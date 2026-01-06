@@ -76,6 +76,10 @@ impl TerminalBuffer {
         &self.grid
     }
 
+    pub fn grid_mut(&mut self) -> &mut Grid {
+        &mut self.grid
+    }
+
     pub fn cursor_pos(&self) -> (usize, usize) {
         (self.cursor_x, self.cursor_y)
     }

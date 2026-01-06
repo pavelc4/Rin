@@ -354,3 +354,28 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
     }
     env.new_string("").unwrap()
 }
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_rin_RinLib_hasDirtyRows(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> bool {
+    let sessions_arc = get_sessions();
+    let sessions = sessions_arc.read().unwrap();
+    if let Some(session) = sessions.get(&handle) {
+        let engine = session.engine.lock().unwrap();
+        engine.buffer().grid().has_dirty_rows()
+    } else {
+        false
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_rin_RinLib_clearDirty(_env: JNIEnv, _class: JClass, handle: jlong) {
+    let sessions_arc = get_sessions();
+    let sessions = sessions_arc.read().unwrap();
+    if let Some(session) = sessions.get(&handle) {
+        let mut engine = session.engine.lock().unwrap();
+        engine.buffer_mut().grid_mut().clear_dirty();
+    }
+}
