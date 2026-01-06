@@ -105,6 +105,11 @@ private class TerminalCanvasView(context: Context) : View(context) {
         color = Color.WHITE
         alpha = 150
     }
+    private val bgPaint = Paint()
+    private val fgPaint = Paint().apply {
+        typeface = Typeface.MONOSPACE
+        isAntiAlias = true
+    }
 
     private val charWidth: Float
         get() = textPaint.measureText("W")
@@ -317,12 +322,8 @@ private class TerminalCanvasView(context: Context) : View(context) {
 
         if (engineHandle == 0L) return
 
-        val bgPaint = Paint()
-        val fgPaint = Paint().apply {
-            typeface = Typeface.MONOSPACE
-            isAntiAlias = true
-            textSize = textPaint.textSize
-        }
+        // Update fgPaint text size (in case font size changed)
+        fgPaint.textSize = textPaint.textSize
 
         // Draw cells with colors
         for (y in 0 until rows) {

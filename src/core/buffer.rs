@@ -4,7 +4,7 @@ use crate::parser::{Charset, Command, CursorStyle, MouseMode};
 use anyhow::Result;
 use std::collections::VecDeque;
 
-const DEFAULT_SCROLLBACK_LIMIT: usize = 10_000;
+const DEFAULT_SCROLLBACK_LIMIT: usize = 2_000;
 
 #[derive(Debug, Clone)]
 pub struct TerminalBuffer {

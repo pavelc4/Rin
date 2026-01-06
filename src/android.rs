@@ -4,8 +4,9 @@ use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jint, jlong};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread;
 
 type EngineHandle = jlong;
@@ -17,12 +18,12 @@ struct AndroidSession {
     // reader_thread: Option<thread::JoinHandle<()>>,
 }
 
-static SESSIONS: OnceLock<Arc<Mutex<HashMap<EngineHandle, AndroidSession>>>> = OnceLock::new();
+static SESSIONS: OnceLock<Arc<RwLock<HashMap<EngineHandle, AndroidSession>>>> = OnceLock::new();
 static NEXT_HANDLE: AtomicI64 = AtomicI64::new(1);
 
-fn get_sessions() -> Arc<Mutex<HashMap<EngineHandle, AndroidSession>>> {
+fn get_sessions() -> Arc<RwLock<HashMap<EngineHandle, AndroidSession>>> {
     SESSIONS
-        .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+        .get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
         .clone()
 }
 
@@ -150,7 +151,7 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
     let session = AndroidSession { engine, pty };
 
     let sessions_arc = get_sessions();
-    sessions_arc.lock().unwrap().insert(handle, session);
+    sessions_arc.write().unwrap().insert(handle, session);
 
     log::info!("Engine created with handle: {}", handle);
     handle
@@ -163,7 +164,7 @@ pub extern "system" fn Java_com_rin_RinLib_destroyEngine(
     handle: jlong,
 ) {
     let sessions_arc = get_sessions();
-    sessions_arc.lock().unwrap().remove(&handle);
+    sessions_arc.write().unwrap().remove(&handle);
     log::info!("Engine destroyed: {}", handle);
 }
 
@@ -177,7 +178,7 @@ pub extern "system" fn Java_com_rin_RinLib_write(
     match env.convert_byte_array(&data) {
         Ok(bytes) => {
             let sessions_arc = get_sessions();
-            let sessions = sessions_arc.lock().unwrap();
+            let sessions = sessions_arc.read().unwrap();
             if let Some(session) = sessions.get(&handle) {
                 // Write to PTY, not Engine
                 let mut pty = session.pty.lock().unwrap();
@@ -203,7 +204,7 @@ pub extern "system" fn Java_com_rin_RinLib_render(
     handle: jlong,
 ) -> jint {
     let sessions_arc = get_sessions();
-    let sessions = sessions_arc.lock().unwrap();
+    let sessions = sessions_arc.read().unwrap();
     if let Some(session) = sessions.get(&handle) {
         let mut engine = session.engine.lock().unwrap();
         match engine.render() {
@@ -224,7 +225,7 @@ pub extern "system" fn Java_com_rin_RinLib_resize(
     height: jint,
 ) -> jint {
     let sessions_arc = get_sessions();
-    let sessions = sessions_arc.lock().unwrap();
+    let sessions = sessions_arc.read().unwrap();
     if let Some(session) = sessions.get(&handle) {
         // Resize both Engine and PTY
         let mut engine = session.engine.lock().unwrap();
@@ -246,7 +247,7 @@ pub extern "system" fn Java_com_rin_RinLib_getLine<'local>(
     y: jint,
 ) -> JString<'local> {
     let sessions_arc = get_sessions();
-    let sessions = sessions_arc.lock().unwrap();
+    let sessions = sessions_arc.read().unwrap();
     if let Some(session) = sessions.get(&handle) {
         let engine = session.engine.lock().unwrap();
         let buffer = engine.buffer();
@@ -268,7 +269,7 @@ pub extern "system" fn Java_com_rin_RinLib_getCursorX(
     handle: jlong,
 ) -> jint {
     let sessions_arc = get_sessions();
-    let sessions = sessions_arc.lock().unwrap();
+    let sessions = sessions_arc.read().unwrap();
     if let Some(session) = sessions.get(&handle) {
         let engine = session.engine.lock().unwrap();
         engine.buffer().cursor_pos().0 as jint
@@ -284,7 +285,7 @@ pub extern "system" fn Java_com_rin_RinLib_getCursorY(
     handle: jlong,
 ) -> jint {
     let sessions_arc = get_sessions();
-    let sessions = sessions_arc.lock().unwrap();
+    let sessions = sessions_arc.read().unwrap();
     if let Some(session) = sessions.get(&handle) {
         let engine = session.engine.lock().unwrap();
         engine.buffer().cursor_pos().1 as jint
@@ -301,7 +302,7 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
     y: jint,
 ) -> JString<'local> {
     let sessions_arc = get_sessions();
-    let sessions = sessions_arc.lock().unwrap();
+    let sessions = sessions_arc.read().unwrap();
     if let Some(session) = sessions.get(&handle) {
         let engine = session.engine.lock().unwrap();
         let buffer = engine.buffer();
@@ -322,11 +323,12 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
                 };
 
                 // Format: char\tfgR,fgG,fgB\tbgR,bgG,bgB\tflags (tab-separated)
-                result.push(cell.character);
-                result.push('\t');
-                result.push_str(&format!("{},{},{}", fg.r, fg.g, fg.b));
-                result.push('\t');
-                result.push_str(&format!("{},{},{}", bg.r, bg.g, bg.b));
+                // Use write! instead of format! to avoid heap allocations
+                let _ = write!(
+                    result,
+                    "{}\t{},{},{}\t{},{},{}",
+                    cell.character, fg.r, fg.g, fg.b, bg.r, bg.g, bg.b
+                );
                 result.push('\t');
 
                 // Flags
