@@ -41,3 +41,6 @@ required-features = ["pty"]
 [[example]]
 name = "tui"
 required-features = ["pty", "crossterm"]
+
+[workspace]
+members = ["rpkg"]
