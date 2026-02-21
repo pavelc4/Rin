@@ -90,6 +90,11 @@ It provides **seamless terminal access and robust package management** on Androi
 - **Android Version** – Android 10 (API 29) or above
 - **Architecture** – ARM64 (`aarch64`)
 
+## Credits
+
+- [Termux](https://termux.dev/) - The premier Android terminal emulator and Linux environment app that pioneered modern terminal capabilities on Android. `rpkg` leverages their incredible package repository ecosystem.
+- [NeoTerm](https://github.com/NeoTerm/NeoTerm) & Other Terminal Emulators - For continuing to push the boundaries of what is possible on Android devices and inspiring Rin's development.
+
 ---
 
 ## License
