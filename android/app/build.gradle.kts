@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -37,6 +36,11 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDir("src/main/jniLibs")
+        }
+    }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }
