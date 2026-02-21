@@ -22,19 +22,16 @@ It provides **seamless terminal access and robust package management** on Androi
 ## Features
 
 - **Built-in Package Manager (`rpkg`)**  
-  A lightweight, pacman-style (`-S`, `-R`, dll) package manager written in Rust, utilizing the vast Termux repository ecosystem directly within the app.
+  A lightweight, pacman-style (`-S`, `-R`, etc.) package manager written in Rust, utilizing the vast Termux repository ecosystem directly within the app.
 
-- **W^X Execution Bypass**  
-  Natively bypasses Android 10+ execute security restrictions (W^X) using intelligent JNI proxy wrappers, dynamic symbolic links, and ELF `.interp` patching, enabling standard Linux binaries and shell scripts to run smoothly without root.
-
-- **Multicall Binary Support**  
-  Intelligent proxy injection supports complex multicall binaries (like `coreutils`, `busybox`, `toybox`) and dynamic `.so` libraries right out of the box.
+- **Multicall Binary & Library Support**  
+  Intelligent proxy injection supports complex multicall binaries (like `coreutils`, `busybox`, `toybox`) and dynamic `.so` libraries right out of the box, seamlessly bypassing Android's W^X execution restrictions.
 
 - **Material 3 UI**  
   Clean, modern, and highly responsive interface built natively with Jetpack Compose.
 
 - **Fast & Minimal**  
-  Lightweight architecture natively binding Rust binaries via JNI, optimized for speed.
+  Lightweight architecture natively binding Rust binaries via JNI.
 
 ---
 
@@ -90,10 +87,11 @@ It provides **seamless terminal access and robust package management** on Androi
 - **Android Version** – Android 10 (API 29) or above
 - **Architecture** – ARM64 (`aarch64`)
 
+---
+
 ## Credits
 
 - [Termux](https://termux.dev/) - The premier Android terminal emulator and Linux environment app that pioneered modern terminal capabilities on Android. `rpkg` leverages their incredible package repository ecosystem.
-- [NeoTerm](https://github.com/NeoTerm/NeoTerm) & Other Terminal Emulators - For continuing to push the boundaries of what is possible on Android devices and inspiring Rin's development.
 
 ---
 
