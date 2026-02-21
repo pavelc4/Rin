@@ -76,11 +76,15 @@ impl PackageManager {
         Ok(())
     }
 
-    pub fn install(&mut self, package_name: &str) -> anyhow::Result<()> {
+    pub fn install(&mut self, package_name: &str, force: bool) -> anyhow::Result<()> {
         let index = PackageIndex::from_cache(&self.index_path())
             .map_err(|e| anyhow::anyhow!("Failed to read package index. Did you run sync? Error: {}", e))?;
         
-        let installed_set: HashSet<String> = self.installed.keys().cloned().collect();
+        let installed_set: HashSet<String> = if force {
+            HashSet::new()
+        } else {
+            self.installed.keys().cloned().collect()
+        };
         let resolver = Resolver::new(&index, installed_set);
         
         let to_install = resolver.resolve(package_name)?;
@@ -166,7 +170,7 @@ impl PackageManager {
         }
 
         for name in to_upgrade {
-            self.install(&name)?;
+            self.install(&name, true)?;
         }
         Ok(())
     }
