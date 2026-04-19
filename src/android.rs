@@ -105,7 +105,7 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
             " \x1b[33mType '\x1b[1mhelp\x1b[0m\x1b[33m' for available commands\x1b[0m\r\n",
             "\r\n",
         ));
-        
+
         // Add storage permission warning if not granted
         if has_storage_permission == 0 {
             banner.push_str(concat!(
@@ -120,7 +120,7 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
                 "\r\n",
             ));
         }
-        
+
         let _ = engine_guard.write(banner.as_bytes());
     }
 
@@ -277,7 +277,7 @@ pub extern "system" fn Java_com_rin_RinLib_createRootEngine(
             " \x1b[33mType '\x1b[1mhelp\x1b[0m\x1b[33m' for available commands\x1b[0m\r\n",
             "\r\n",
         ));
-        
+
         if has_storage_permission == 0 {
             banner.push_str(concat!(
                 " \x1b[31m\x1b[1m⚠ Storage permission required!\x1b[0m\r\n",
@@ -291,7 +291,7 @@ pub extern "system" fn Java_com_rin_RinLib_createRootEngine(
                 "\r\n",
             ));
         }
-        
+
         let _ = engine_guard.write(banner.as_bytes());
     }
 
@@ -580,6 +580,65 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
     env.with_env(|env| env.new_string(""))
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
 }
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_rin_RinLib_getCellDataOptimized<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handle: jlong,
+    y: jint,
+) -> jni::objects::JIntArray<'local> {
+    let sessions_arc = get_sessions();
+    let sessions = sessions_arc.read().unwrap();
+    if let Some(session) = sessions.get(&handle) {
+        let engine = session.engine.lock().unwrap();
+        let buffer = engine.buffer();
+        let grid = buffer.grid();
+        if let Some(row) = grid.row(y as usize) {
+            let mut data = Vec::with_capacity(row.len() * 3);
+            for cell in row.iter() {
+                if cell.wide_spacer {
+                    continue;
+                }
+
+                let style = &cell.style;
+                let (fg, bg) = if style.reverse {
+                    (&style.bg, &style.fg)
+                } else {
+                    (&style.fg, &style.bg)
+                };
+
+                // 1. Char + Flags
+                let mut char_flags = (cell.character as u32) & 0x001F_FFFF; // 21 bits
+                if style.bold { char_flags |= 1 << 21; }
+                if style.italic { char_flags |= 1 << 22; }
+                if style.dim { char_flags |= 1 << 23; }
+                if cell.wide { char_flags |= 1 << 24; }
+
+                // 2. FG (0xRRGGBB)
+                let fg_packed = ((fg.r as u32) << 16) | ((fg.g as u32) << 8) | (fg.b as u32);
+
+                // 3. BG (0xRRGGBB)
+                let bg_packed = ((bg.r as u32) << 16) | ((bg.g as u32) << 8) | (bg.b as u32);
+
+                data.push(char_flags as i32);
+                data.push(fg_packed as i32);
+                data.push(bg_packed as i32);
+            }
+
+            return env.with_env(|env| -> jni::errors::Result<jni::objects::JIntArray> {
+                let jarray = env.new_int_array(data.len())?;
+                env.set_int_array_region(&jarray, 0, &data)?;
+                Ok(jarray)
+            }).resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+        }
+    }
+
+    env.with_env(|env| -> jni::errors::Result<jni::objects::JIntArray> {
+        Ok(env.new_int_array(0)?)
+    }).resolve::<jni::errors::ThrowRuntimeExAndDefault>()
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_rin_RinLib_hasDirtyRows(
     _env: EnvUnowned,

@@ -49,7 +49,7 @@ It provides **seamless terminal access and robust package management** on Androi
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/YourName/Rin.git
+   git clone https://github.com/pavelc4/Rin
    cd Rin
    ```
 
