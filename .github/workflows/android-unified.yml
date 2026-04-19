@@ -1,0 +1,261 @@
+name: Android Unified Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Debug & Release APK
+    runs-on: ubuntu-latest
+    # Map secrets to env vars at the job level so they can be used in 'if' conditions
+    env:
+      HAS_PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN != '' }}
+      HAS_KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASSWORD != '' }}
+
+    steps:
+      - name: Checkout Rin Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Environment Variables
+        run: |
+          VERSION=$(grep -E '^version = "[^"]+"' Cargo.toml | head -n 1 | cut -d '"' -f 2)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+
+      - name: Notify Build Start
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then exit 0; fi
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/[<>&"]/\\&/g')
+          
+          RELEASE_TAG="${{ github.ref_name }}"
+          if [ "$RELEASE_TAG" = "main" ]; then
+            BUILD_LABEL="Unified Build (Manual/Push)"
+            RELEASE_TAG="v${{ env.VERSION }}-${{ env.SHORT_SHA }}"
+          elif [[ "$RELEASE_TAG" == v* ]]; then
+            BUILD_LABEL="Auto Release Build"
+          else
+             BUILD_LABEL="Branch Build ($RELEASE_TAG)"
+          fi
+
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          MESSAGE="<b>Rin $BUILD_LABEL Started 🚀</b>
+          Version: $RELEASE_TAG
+
+          <blockquote><code>$COMMIT_MSG</code></blockquote>
+
+          <a href=\"$COMMIT_URL\">Commit</a> | <a href=\"$WORKFLOW_URL\">Workflow</a>"
+
+          curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendMessage" \
+              -d chat_id="$CHAT_ID" \
+              -d parse_mode="HTML" \
+              -d disable_web_page_preview="true" \
+              --data-urlencode "text=$MESSAGE"
+
+      - name: Checkout Keystore Repository
+        if: env.HAS_PRIVATE_TOKEN == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: pavelc4/keystores
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: keystore-repo
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+          components: rust-src
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+          add-to-path: true
+
+      - name: Build Native libraries
+        id: build-native
+        run: |
+          set -o pipefail
+          {
+            cargo ndk -t aarch64-linux-android -o android/app/src/main/jniLibs build -p rin --release --features android
+            cargo ndk -t aarch64-linux-android -o android/app/src/main/jniLibs build -p rpkg --release --features android
+            cargo ndk -t aarch64-linux-android build -p rpkg --release --bin rpkg
+            mkdir -p android/app/src/main/jniLibs/arm64-v8a
+            cp target/aarch64-linux-android/release/rpkg android/app/src/main/jniLibs/arm64-v8a/librpkg_cli.so
+          } 2>&1 | tee build-native.log
+
+      - name: Build Debug APK
+        run: |
+          set -o pipefail
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug 2>&1 | tee ../build-gradle-debug.log
+
+      - name: Build Release APK
+        if: env.HAS_PRIVATE_TOKEN == 'true' && env.HAS_KEYSTORE_PASS == 'true'
+        run: |
+          set -o pipefail
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=${{ github.workspace }}/keystore-repo/rin-release.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEYALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} 2>&1 | tee ../build-gradle-release.log
+
+      - name: Rename Artifacts
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}.apk
+          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+            mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk
+          fi
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}
+          path: android/app/build/outputs/apk/debug/Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}.apk
+
+      - name: Upload Release APK Artifact
+        if: env.HAS_PRIVATE_TOKEN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}
+          path: android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android/app/build/outputs/apk/debug/Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}.apk
+            android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Telegram on Success
+        if: success()
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then exit 0; fi
+          DEBUG_APK="android/app/build/outputs/apk/debug/Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}.apk"
+          RELEASE_APK="android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk"
+
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/[<>&"]/\\&/g')
+          RELEASE_TAG="${{ github.ref_name }}"
+          
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          CAPTION="<b>✅ Rin Unified Build Success</b>
+          Version: $RELEASE_TAG
+          Branch: $GITHUB_REF_NAME
+
+          <blockquote><code>$COMMIT_MSG</code></blockquote>
+
+          <a href=\"$COMMIT_URL\">Commit</a> | <a href=\"$WORKFLOW_URL\">Workflow</a>"
+
+          # Send Debug APK
+          curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendDocument" \
+              -F chat_id="$CHAT_ID" \
+              -F document=@"$DEBUG_APK" \
+              -F parse_mode="HTML" \
+              -F disable_web_page_preview="true" \
+              --form-string "caption=$CAPTION (DEBUG)"
+
+          # Send Release APK (if exists)
+          if [ -f "$RELEASE_APK" ]; then
+            RESPONSE=$(curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendDocument" \
+                -F chat_id="$CHAT_ID" \
+                -F document=@"$RELEASE_APK" \
+                -F parse_mode="HTML" \
+                -F disable_web_page_preview="true" \
+                --form-string "caption=$CAPTION (RELEASE)")
+
+            # Pin the Release APK
+            MESSAGE_ID=$(echo "$RESPONSE" | grep -o '"message_id":[0-9]*' | head -1 | cut -d':' -f2)
+            if [ -n "$MESSAGE_ID" ]; then
+              curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/pinChatMessage" \
+                  -d chat_id="$CHAT_ID" \
+                  -d message_id="$MESSAGE_ID" \
+                  -d disable_notification="true"
+            fi
+          fi
+
+      - name: Notify Telegram on Failure
+        if: failure()
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then exit 0; fi
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/[<>&"]/\\&/g')
+
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          MESSAGE="<b>❌ Rin Unified Build Failed</b>
+          Branch: $GITHUB_REF_NAME
+
+          <blockquote><code>$COMMIT_MSG</code></blockquote>
+
+          <a href=\"$COMMIT_URL\">Commit</a> | <a href=\"$WORKFLOW_URL\">View Logs</a>"
+
+          curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendMessage" \
+              -d chat_id="$CHAT_ID" \
+              -d parse_mode="HTML" \
+              -d disable_web_page_preview="true" \
+              --data-urlencode "text=$MESSAGE"
+
+          # Error logs (simplified summary)
+          echo "=== BUILD FAILURE LOG ===" > build-error.log
+          echo "Build Date: $(date)" >> build-error.log
+          echo "Commit: ${{ github.sha }}" >> build-error.log
+          
+          if [ -f build-native.log ]; then
+            echo "=== build-native.log (last 100 lines) ===" >> build-error.log
+            tail -n 100 build-native.log >> build-error.log
+            echo "" >> build-error.log
+          fi
+          
+          if [ -f build-gradle-debug.log ]; then
+            echo "=== build-gradle-debug.log (last 100 lines) ===" >> build-error.log
+            tail -n 100 build-gradle-debug.log >> build-error.log
+            echo "" >> build-error.log
+          fi
+          
+          if [ -f build-gradle-release.log ]; then
+            echo "=== build-gradle-release.log (last 100 lines) ===" >> build-error.log
+            tail -n 100 build-gradle-release.log >> build-error.log
+            echo "" >> build-error.log
+          fi
+
+          curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendDocument" \
+              -F chat_id="$CHAT_ID" \
+              -F document=@"build-error.log" \
+              -F caption="📋 Unified Build Error Log"

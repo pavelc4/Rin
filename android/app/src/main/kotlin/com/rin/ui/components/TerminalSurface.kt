@@ -128,7 +128,7 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
 
     private var cols = 80
     private var rows = 24
-    
+
     private val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     // Text selection
@@ -137,12 +137,12 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
     private var selectionStartY = 0
     private var selectionEndX = 0
     private var selectionEndY = 0
-    
+
     private val selectionPaint = Paint().apply {
         color = Color.argb(100, 100, 150, 255)
         style = Paint.Style.FILL
     }
-    
+
     companion object {
         private const val MENU_COPY = 1
         private const val MENU_PASTE = 2
@@ -233,7 +233,7 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
             MotionEvent.ACTION_DOWN -> {
                 val x = (event.x / charWidth).toInt().coerceIn(0, cols - 1)
                 val y = (event.y / lineHeight).toInt().coerceIn(0, rows - 1)
-                
+
                 if (isSelecting) {
                     isSelecting = false
                     invalidate()
@@ -243,7 +243,7 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
                     selectionEndX = x
                     selectionEndY = y
                 }
-                
+
                 requestFocus()
                 val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
@@ -267,10 +267,10 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
         }
         return true
     }
-    
+
     override fun onCreateContextMenu(menu: ContextMenu, v: View, menuInfo: ContextMenu.ContextMenuInfo?) {
         menu.setHeaderTitle("Terminal")
-        
+
         if (isSelecting) {
             menu.add(0, MENU_COPY, 0, "Copy").setOnMenuItemClickListener {
                 copySelectedText()
@@ -279,18 +279,18 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
                 true
             }
         }
-        
+
         menu.add(0, MENU_PASTE, 0, "Paste").setOnMenuItemClickListener {
             pasteFromClipboard()
             true
         }
-        
+
         menu.add(0, MENU_SELECT_ALL, 0, "Select All").setOnMenuItemClickListener {
             selectAll()
             true
         }
     }
-    
+
     private fun selectAll() {
         isSelecting = true
         selectionStartX = 0
@@ -300,21 +300,21 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
         invalidate()
         showContextMenu()
     }
-    
+
     private fun copySelectedText() {
         if (engineHandle == 0L || !isSelecting) return
-        
+
         val textBuilder = StringBuilder()
-        val (startY, startX, endY, endX) = if (selectionStartY < selectionEndY || 
+        val (startY, startX, endY, endX) = if (selectionStartY < selectionEndY ||
             (selectionStartY == selectionEndY && selectionStartX <= selectionEndX)) {
             listOf(selectionStartY, selectionStartX, selectionEndY, selectionEndX)
         } else {
             listOf(selectionEndY, selectionEndX, selectionStartY, selectionStartX)
         }
-        
+
         for (y in startY..endY) {
             val line = RinLib.getLine(engineHandle, y)
-            
+
             when {
                 y == startY && y == endY -> {
                     val start = startX.coerceIn(0, line.length)
@@ -336,13 +336,13 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
                 }
             }
         }
-        
+
         val clip = ClipData.newPlainText("terminal", textBuilder.toString())
         clipboardManager.setPrimaryClip(clip)
-        
+
         android.widget.Toast.makeText(context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
     }
-    
+
     private fun pasteFromClipboard() {
         val clip = clipboardManager.primaryClip
         if (clip != null && clip.itemCount > 0) {
@@ -512,30 +512,31 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
         fgPaint.textSize = textPaint.textSize
 
         for (y in 0 until rows) {
-            val cellData = RinLib.getCellData(engineHandle, y)
+            val cellData = RinLib.getCellDataOptimized(engineHandle, y)
             if (cellData.isEmpty()) continue
 
-            val cells = cellData.split("\n").filter { it.isNotEmpty() }
             var xPos = 0
+            var i = 0
+            while (i < cellData.size) {
+                val charFlags = cellData[i++]
+                val fgColorPacked = cellData[i++]
+                val bgColorPacked = cellData[i++]
 
-            for (cellStr in cells) {
-                val parts = cellStr.split("\t")
-                if (parts.size < 4) {
-                    xPos++
-                    continue
-                }
+                val charCode = charFlags and 0x001F_FFFF
+                val isBold = (charFlags and (1 shl 21)) != 0
+                val isItalic = (charFlags and (1 shl 22)) != 0
+                val isDim = (charFlags and (1 shl 23)) != 0
+                val isWide = (charFlags and (1 shl 24)) != 0
 
-                val char = parts[0]
-                val fgParts = parts[1].split(",")
-                val bgParts = parts[2].split(",")
-                val flags = parts[3]
+                val char = if (charCode == 0) " " else Character.toChars(charCode).concatToString()
 
-                val fgR = fgParts.getOrNull(0)?.toIntOrNull() ?: 255
-                val fgG = fgParts.getOrNull(1)?.toIntOrNull() ?: 255
-                val fgB = fgParts.getOrNull(2)?.toIntOrNull() ?: 255
-                val bgR = bgParts.getOrNull(0)?.toIntOrNull() ?: 0
-                val bgG = bgParts.getOrNull(1)?.toIntOrNull() ?: 0
-                val bgB = bgParts.getOrNull(2)?.toIntOrNull() ?: 0
+                val fgR = (fgColorPacked shr 16) and 0xFF
+                val fgG = (fgColorPacked shr 8) and 0xFF
+                val fgB = fgColorPacked and 0xFF
+
+                val bgR = (bgColorPacked shr 16) and 0xFF
+                val bgG = (bgColorPacked shr 8) and 0xFF
+                val bgB = bgColorPacked and 0xFF
 
                 val fgColor = rgbToAnsiIndex(fgR, fgG, fgB)?.let { getMonetColor(it) }
                     ?: Color.rgb(fgR, fgG, fgB)
@@ -564,11 +565,11 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
                 }
 
                 fgPaint.color = fgColor
-                fgPaint.isFakeBoldText = flags.contains('b')
-                fgPaint.textSkewX = if (flags.contains('i')) -0.25f else 0f
-                fgPaint.alpha = if (flags.contains('d')) 150 else 255
+                fgPaint.isFakeBoldText = isBold
+                fgPaint.textSkewX = if (isItalic) -0.25f else 0f
+                fgPaint.alpha = if (isDim) 150 else 255
 
-                if (char.isNotEmpty() && char != " ") {
+                if (char != " ") {
                     canvas.drawText(
                         char,
                         xPos * charWidth,
@@ -576,7 +577,7 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
                         fgPaint
                     )
                 }
-                xPos += if (flags.contains('w')) 2 else 1
+                xPos += if (isWide) 2 else 1
             }
         }
 
@@ -602,15 +603,15 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
             RinLib.clearDirty(engineHandle)
         }
     }
-    
+
     private fun isPositionInSelection(x: Int, y: Int): Boolean {
-        val (startY, startX, endY, endX) = if (selectionStartY < selectionEndY || 
+        val (startY, startX, endY, endX) = if (selectionStartY < selectionEndY ||
             (selectionStartY == selectionEndY && selectionStartX <= selectionEndX)) {
             listOf(selectionStartY, selectionStartX, selectionEndY, selectionEndX)
         } else {
             listOf(selectionEndY, selectionEndX, selectionStartY, selectionStartX)
         }
-        
+
         return when {
             y < startY || y > endY -> false
             y == startY && y == endY -> x in startX..endX
