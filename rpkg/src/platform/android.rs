@@ -1,13 +1,8 @@
-#[cfg(feature = "android")]
 use crate::manager::PackageManager;
-#[cfg(feature = "android")]
-use jni::objects::{JClass, JString};
-#[cfg(feature = "android")]
-use jni::sys::jstring;
-#[cfg(feature = "android")]
 use jni::EnvUnowned;
+use jni::objects::{JClass, JString};
+use jni::sys::jstring;
 
-#[cfg(feature = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_rin_rpkg_RpkgLib_execute<'local>(
     mut env: EnvUnowned<'local>,

@@ -1,5 +1,5 @@
-use crate::index::PackageIndex;
-use crate::types::PackageInfo;
+use crate::core::index::PackageIndex;
+use crate::core::types::PackageInfo;
 use std::collections::HashSet;
 
 pub struct Resolver<'a> {
@@ -39,7 +39,10 @@ impl<'a> Resolver<'a> {
         let pkg = match self.index.get(package_name) {
             Some(p) => p,
             None => {
-                let provider = self.index.iter().find(|p| p.provides.contains(&package_name.to_string()));
+                let provider = self
+                    .index
+                    .iter()
+                    .find(|p| p.provides.contains(&package_name.to_string()));
                 match provider {
                     Some(p) => p,
                     None => anyhow::bail!("Package not found in index: {}", package_name),
@@ -59,8 +62,4 @@ impl<'a> Resolver<'a> {
 
         Ok(())
     }
-}
-
-#[cfg(test)]
-mod tests {
 }

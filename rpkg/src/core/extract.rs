@@ -9,10 +9,12 @@ use xz2::read::XzDecoder;
 use zstd::stream::read::Decoder as ZstdDecoder;
 
 const PKG_EMBEDDED_PREFIX: &str = "data/data/com.termux/files/";
-const PKG_ABS_SEARCH:  &[u8] = b"/data/data/com.termux/files";
+const PKG_ABS_SEARCH: &[u8] = b"/data/data/com.termux/files";
 const PKG_ABS_REPLACE: &[u8] = b"/data/data/com.rin////files";
-const _: () = assert!(PKG_ABS_SEARCH.len() == PKG_ABS_REPLACE.len(), "binary patch strings must be the same byte length");
-
+const _: () = assert!(
+    PKG_ABS_SEARCH.len() == PKG_ABS_REPLACE.len(),
+    "binary patch strings must be the same byte length"
+);
 
 fn strip_upstream(raw: &str) -> Option<&str> {
     let normalized = raw.trim_start_matches("./");
@@ -31,11 +33,15 @@ fn strip_upstream(raw: &str) -> Option<&str> {
 
 fn patch_content(content: &[u8]) -> Vec<u8> {
     let mut out = content.to_vec();
-    
-    if out.windows(PKG_ABS_SEARCH.len()).any(|w| w == PKG_ABS_SEARCH) {
+
+    if out
+        .windows(PKG_ABS_SEARCH.len())
+        .any(|w| w == PKG_ABS_SEARCH)
+    {
         let mut temp = Vec::with_capacity(out.len());
         let mut cur = &out[..];
-        while let Some(pos) = cur.windows(PKG_ABS_SEARCH.len())
+        while let Some(pos) = cur
+            .windows(PKG_ABS_SEARCH.len())
             .position(|w| w == PKG_ABS_SEARCH)
         {
             temp.extend_from_slice(&cur[..pos]);
@@ -71,7 +77,10 @@ fn patch_content(content: &[u8]) -> Vec<u8> {
                                     out[pos + i] = 0;
                                 }
                             }
-                            log::debug!("Patched ELF interpreter to {:?}", std::str::from_utf8(system_linker).unwrap_or(""));
+                            log::debug!(
+                                "Patched ELF interpreter to {:?}",
+                                std::str::from_utf8(system_linker).unwrap_or("")
+                            );
                         }
                     }
                 }
@@ -165,7 +174,10 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                                     fs::copy(&abs_target, &dest_path)?;
                                 }
                             } else {
-                                log::debug!("HardLink source missing, skipping: {}", abs_target.display());
+                                log::debug!(
+                                    "HardLink source missing, skipping: {}",
+                                    abs_target.display()
+                                );
                             }
                             installed_files.push(clean_str);
                         }
@@ -180,17 +192,19 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
 
                         let mut content = Vec::new();
                         file.read_to_end(&mut content)?;
-                        
+
                         let _is_elf = content.starts_with(b"\x7FELF");
                         let patched = patch_content(&content);
 
                         let dest_str = dest_path.to_string_lossy();
-                        let is_library = dest_str.contains("/usr/lib/") || dest_str.contains("/lib/") || dest_str.contains(".so");
+                        let is_library = dest_str.contains("/usr/lib/")
+                            || dest_str.contains("/lib/")
+                            || dest_str.contains(".so");
 
                         if is_executable && !is_library {
                             let elf_dest_path = dest_path.with_extension("elf");
                             let _ = fs::remove_file(&elf_dest_path);
-                            
+
                             let out_file = File::create(&elf_dest_path)?;
                             let mut writer = BufWriter::with_capacity(64 * 1024, out_file);
                             std::io::Write::write_all(&mut writer, &patched)?;
@@ -200,9 +214,9 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                             fs::set_permissions(&elf_dest_path, perms)?;
 
                             let _ = fs::remove_file(&dest_path);
-                            let rpkg_proxy = PathBuf::from(crate::DEFAULT_PREFIX).join("usr/bin/rpkg");
+                            let rpkg_proxy =
+                                PathBuf::from(crate::DEFAULT_PREFIX).join("usr/bin/rpkg");
                             std::os::unix::fs::symlink(&rpkg_proxy, &dest_path)?;
-
                         } else {
                             let _ = fs::remove_file(&dest_path);
                             let out_file = File::create(&dest_path)?;

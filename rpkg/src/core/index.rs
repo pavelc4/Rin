@@ -1,4 +1,4 @@
-use crate::types::{Dependency, PackageInfo, VersionConstraint, VersionOp};
+use crate::core::types::{Dependency, PackageInfo, VersionConstraint, VersionOp};
 use flate2::read::GzDecoder;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
@@ -96,7 +96,7 @@ impl PackageIndex {
                             (VersionOp::Gt, v.trim())
                         } else if let Some(v) = ver_part.strip_prefix("<<") {
                             (VersionOp::Lt, v.trim())
-                        } else if let Some(v) = ver_part.strip_prefix("=") {
+                        } else if let Some(v) = ver_part.strip_prefix('=') {
                             (VersionOp::Eq, v.trim())
                         } else {
                             return Some(Dependency {
@@ -151,6 +151,7 @@ impl PackageIndex {
     pub fn len(&self) -> usize {
         self.packages.len()
     }
+
     pub fn is_empty(&self) -> bool {
         self.packages.is_empty()
     }
@@ -168,19 +169,19 @@ mod tests {
     fn test_parse_depends() {
         let deps_str = "libc, libcurl (>= 7.80.0), zlib (= 1.2.11)".to_string();
         let deps = PackageIndex::parse_depends(Some(&deps_str));
-        
+
         assert_eq!(deps.len(), 3);
         assert_eq!(deps[0].name, "libc");
         assert!(deps[0].version.is_none());
-        
+
         assert_eq!(deps[1].name, "libcurl");
         assert_eq!(deps[1].version.as_ref().unwrap().op, VersionOp::Ge);
         assert_eq!(deps[1].version.as_ref().unwrap().version, "7.80.0");
-        
+
         assert_eq!(deps[2].name, "zlib");
         assert_eq!(deps[2].version.as_ref().unwrap().op, VersionOp::Eq);
     }
-    
+
     #[test]
     fn test_parse_simple_list() {
         let provides = "editor, vi".to_string();

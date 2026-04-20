@@ -38,13 +38,12 @@ pub enum VersionOp {
     Lt, // <<
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InstalledPackage {
     pub info: PackageInfo,
     pub files: Vec<String>,
     pub install_time: u64,
-    pub explicit: bool, 
+    pub explicit: bool,
     pub required_by: Vec<String>,
 }
 
@@ -106,7 +105,7 @@ mod tests {
 
         let json = serde_json::to_string(&pkg).expect("Failed to serialize");
         let deserialized: PackageInfo = serde_json::from_str(&json).expect("Failed to deserialize");
-        
+
         assert_eq!(pkg, deserialized);
     }
 }
