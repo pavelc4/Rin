@@ -7,6 +7,20 @@ pub struct PackageIndex {
     packages: HashMap<String, PackageInfo>,
 }
 
+const VERSION_OPS: &[(&str, VersionOp)] = &[
+    (">=", VersionOp::Ge),
+    ("<=", VersionOp::Le),
+    (">>", VersionOp::Gt),
+    ("<<", VersionOp::Lt),
+    ("=", VersionOp::Eq),
+];
+
+fn parse_version_op(ver_part: &str) -> Option<(VersionOp, &str)> {
+    VERSION_OPS
+        .iter()
+        .find_map(|(prefix, op)| ver_part.strip_prefix(prefix).map(|v| (*op, v.trim())))
+}
+
 impl PackageIndex {
     pub fn from_url(url: &str) -> anyhow::Result<Self> {
         log::info!("Fetching {}", url);
@@ -83,34 +97,17 @@ impl PackageIndex {
         deps.map(|s| {
             s.split(", ")
                 .filter_map(|d| {
-                    let d = d.split(" | ").next()?;
-                    let d = d.trim();
+                    let d = d.split(" | ").next()?.trim();
 
                     if let Some((name, ver_part)) = d.split_once(" (") {
                         let ver_part = ver_part.trim_end_matches(')');
-                        let (op, version) = if let Some(v) = ver_part.strip_prefix(">=") {
-                            (VersionOp::Ge, v.trim())
-                        } else if let Some(v) = ver_part.strip_prefix("<=") {
-                            (VersionOp::Le, v.trim())
-                        } else if let Some(v) = ver_part.strip_prefix(">>") {
-                            (VersionOp::Gt, v.trim())
-                        } else if let Some(v) = ver_part.strip_prefix("<<") {
-                            (VersionOp::Lt, v.trim())
-                        } else if let Some(v) = ver_part.strip_prefix('=') {
-                            (VersionOp::Eq, v.trim())
-                        } else {
-                            return Some(Dependency {
-                                name: name.to_string(),
-                                version: None,
-                            });
-                        };
-
+                        let version = parse_version_op(ver_part).map(|(op, v)| VersionConstraint {
+                            op,
+                            version: v.to_string(),
+                        });
                         Some(Dependency {
                             name: name.to_string(),
-                            version: Some(VersionConstraint {
-                                op,
-                                version: version.to_string(),
-                            }),
+                            version,
                         })
                     } else {
                         Some(Dependency {

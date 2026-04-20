@@ -16,6 +16,81 @@ pub fn handle_multicall() {
     }
 }
 
+fn detect_elf(path: &Path) -> bool {
+    std::fs::File::open(path)
+        .ok()
+        .and_then(|mut f| {
+            let mut magic = [0u8; 4];
+            f.read_exact(&mut magic).ok().map(|_| magic == *b"\x7FELF")
+        })
+        .unwrap_or(false)
+}
+
+fn resolve_interpreter(target_elf: &Path) -> (String, Vec<String>) {
+    use std::io::{BufRead, BufReader};
+
+    let default = (String::from("/system/bin/sh"), Vec::new());
+
+    let f = match std::fs::File::open(target_elf) {
+        Ok(f) => f,
+        Err(_) => return default,
+    };
+
+    let mut reader = BufReader::new(f);
+    let mut first_line = String::new();
+    if reader.read_line(&mut first_line).is_err() {
+        return default;
+    }
+
+    let first_line = first_line.trim();
+    if !first_line.starts_with("#!") {
+        return default;
+    }
+
+    let shebang = first_line[2..].trim();
+    let mut parts = shebang.split_whitespace();
+    let cmd = match parts.next() {
+        Some(c) => c,
+        None => return default,
+    };
+
+    // refactor: hoist shared interpreter_args collection before branch
+    let interpreter_args: Vec<String> = parts.map(|p| p.to_string()).collect();
+
+    let interpreter = if cmd.ends_with("/env") {
+        // refactor: collapse env-handling: first arg is the real command
+        match interpreter_args.first() {
+            Some(env_cmd) => PathBuf::from(DEFAULT_PREFIX)
+                .join("usr/bin")
+                .join(env_cmd)
+                .to_string_lossy()
+                .into_owned(),
+            None => return default,
+        }
+    } else if cmd == "/bin/sh" || cmd == "/system/bin/sh" {
+        String::from("/system/bin/sh")
+    } else {
+        // refactor: collapse repeated DEFAULT_PREFIX join into single branch
+        let name = std::path::Path::new(cmd)
+            .file_name()
+            .unwrap_or(std::ffi::OsStr::new(cmd));
+        PathBuf::from(DEFAULT_PREFIX)
+            .join("usr/bin")
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
+    };
+
+    // skip first arg if it was the env command (already used as interpreter)
+    let args = if cmd.ends_with("/env") {
+        interpreter_args.into_iter().skip(1).collect()
+    } else {
+        interpreter_args
+    };
+
+    (interpreter, args)
+}
+
 fn execute_proxied_binary(exe_path: &Path, exe_name: &str, args: std::env::Args) -> ! {
     let original_path = if exe_path.parent().map_or(true, |p| p.as_os_str().is_empty())
         || exe_path.parent().unwrap().as_os_str() == "."
@@ -52,62 +127,7 @@ fn execute_proxied_binary(exe_path: &Path, exe_name: &str, args: std::env::Args)
         }
     }
 
-    let mut is_elf = false;
-    if let Ok(mut f) = std::fs::File::open(&target_elf) {
-        let mut magic = [0u8; 4];
-        if f.read_exact(&mut magic).is_ok() && &magic == b"\x7FELF" {
-            is_elf = true;
-        }
-    }
-
-    let mut interpreter = String::from("/system/bin/sh");
-    let mut interpreter_args: Vec<String> = Vec::new();
-
-    if !is_elf {
-        if let Ok(f) = std::fs::File::open(&target_elf) {
-            use std::io::{BufRead, BufReader};
-            let mut reader = BufReader::new(f);
-            let mut first_line = String::new();
-            if reader.read_line(&mut first_line).is_ok() {
-                let first_line = first_line.trim();
-                if first_line.starts_with("#!") {
-                    let shebang = first_line[2..].trim();
-                    let mut parts = shebang.split_whitespace();
-                    if let Some(cmd) = parts.next() {
-                        if cmd.ends_with("/env") {
-                            if let Some(env_cmd) = parts.next() {
-                                interpreter = PathBuf::from(DEFAULT_PREFIX)
-                                    .join("usr/bin")
-                                    .join(env_cmd)
-                                    .to_string_lossy()
-                                    .into_owned();
-                                for p in parts {
-                                    interpreter_args.push(p.to_string());
-                                }
-                            }
-                        } else if cmd == "/bin/sh" || cmd == "/system/bin/sh" {
-                            interpreter = String::from("/system/bin/sh");
-                            for p in parts {
-                                interpreter_args.push(p.to_string());
-                            }
-                        } else {
-                            let cmd_path = std::path::Path::new(cmd);
-                            if let Some(name) = cmd_path.file_name() {
-                                interpreter = PathBuf::from(DEFAULT_PREFIX)
-                                    .join("usr/bin")
-                                    .join(name)
-                                    .to_string_lossy()
-                                    .into_owned();
-                            }
-                            for p in parts {
-                                interpreter_args.push(p.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let is_elf = detect_elf(&target_elf); // refactor: use extracted helper
 
     let lib_path = PathBuf::from(DEFAULT_PREFIX).join("usr").join("lib");
     let err = if is_elf {
@@ -118,6 +138,7 @@ fn execute_proxied_binary(exe_path: &Path, exe_name: &str, args: std::env::Args)
             .env("LD_LIBRARY_PATH", &lib_path)
             .exec()
     } else {
+        let (interpreter, interpreter_args) = resolve_interpreter(&target_elf); // refactor: use extracted helper
         let mut cmd = Command::new(&interpreter);
         cmd.args(interpreter_args);
         cmd.arg(&target_elf);

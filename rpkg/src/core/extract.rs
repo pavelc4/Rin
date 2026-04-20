@@ -16,18 +16,66 @@ const _: () = assert!(
     "binary patch strings must be the same byte length"
 );
 
+// refactor: extract repeated fs::create_dir_all(parent) pattern into helper
+fn ensure_parent(path: &Path) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
 fn strip_upstream(raw: &str) -> Option<&str> {
     let normalized = raw.trim_start_matches("./");
 
     if let Some(stripped) = normalized.strip_prefix(PKG_EMBEDDED_PREFIX) {
-        if stripped.is_empty() {
-            return None;
-        }
-        Some(stripped)
-    } else if normalized.starts_with("data/") || normalized.is_empty() || normalized == "." {
-        None
+        // refactor: flatten nested if into single return expression
+        return if stripped.is_empty() { None } else { Some(stripped) };
+    }
+    if normalized.starts_with("data/") || normalized.is_empty() || normalized == "." {
+        return None; // refactor: early return instead of else-if chain
+    }
+    Some(normalized)
+}
+
+// refactor: extract ELF interpreter patching to flatten 4-level nested if-let in patch_content
+fn patch_elf_interpreter(out: &mut Vec<u8>) {
+    if !out.starts_with(b"\x7FELF") {
+        return;
+    }
+    let elf = match goblin::elf::Elf::parse(out) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    let interp = match elf.interpreter {
+        Some(i) if i.contains("com.termux") || i.contains("com.rin") => i,
+        _ => return,
+    };
+    let is_64bit = elf.is_64;
+    let interp_bytes = interp.as_bytes().to_vec();
+    let interp_len = interp_bytes.len();
+    drop(elf);
+
+    let system_linker: &[u8] = if is_64bit {
+        b"/system/bin/linker64\0"
     } else {
-        Some(normalized)
+        b"/system/bin/linker\0"
+    };
+
+    if let Some(pos) = out.windows(interp_len).position(|w| w == interp_bytes) {
+        if system_linker.len() <= interp_len + 1 {
+            for (i, &b) in system_linker.iter().enumerate() {
+                out[pos + i] = b;
+            }
+            for i in system_linker.len()..interp_len + 1 {
+                if pos + i < out.len() {
+                    out[pos + i] = 0;
+                }
+            }
+            log::debug!(
+                "Patched ELF interpreter to {:?}",
+                std::str::from_utf8(system_linker).unwrap_or("")
+            );
+        }
     }
 }
 
@@ -52,42 +100,7 @@ fn patch_content(content: &[u8]) -> Vec<u8> {
         out = temp;
     }
 
-    if out.starts_with(b"\x7FELF") {
-        if let Ok(elf) = goblin::elf::Elf::parse(&out) {
-            if let Some(interp) = elf.interpreter {
-                if interp.contains("com.termux") || interp.contains("com.rin") {
-                    let is_64bit = elf.is_64;
-                    let interp_owned = interp.as_bytes().to_vec();
-                    let interp_len = interp_owned.len();
-                    drop(elf);
-
-                    let system_linker: &[u8] = if is_64bit {
-                        b"/system/bin/linker64\0"
-                    } else {
-                        b"/system/bin/linker\0"
-                    };
-
-                    if let Some(pos) = out.windows(interp_len).position(|w| w == interp_owned) {
-                        if system_linker.len() <= interp_len + 1 {
-                            for (i, &b) in system_linker.iter().enumerate() {
-                                out[pos + i] = b;
-                            }
-                            for i in system_linker.len()..interp_len + 1 {
-                                if pos + i < out.len() {
-                                    out[pos + i] = 0;
-                                }
-                            }
-                            log::debug!(
-                                "Patched ELF interpreter to {:?}",
-                                std::str::from_utf8(system_linker).unwrap_or("")
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+    patch_elf_interpreter(&mut out); // refactor: call extracted helper
     out
 }
 
@@ -110,14 +123,11 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
         let identifier = String::from_utf8_lossy(entry.header().identifier()).to_string();
 
         if identifier.starts_with("data.tar") {
-            let tar_reader: Box<dyn Read> = if identifier.ends_with(".xz") {
-                Box::new(XzDecoder::new(entry))
-            } else if identifier.ends_with(".zst") {
-                Box::new(ZstdDecoder::new(entry)?)
-            } else if identifier.ends_with(".gz") {
-                Box::new(GzDecoder::new(entry))
-            } else {
-                Box::new(entry)
+            let tar_reader: Box<dyn Read> = match identifier.rsplit_once('.').map(|(_, ext)| ext) {
+                Some("xz") => Box::new(XzDecoder::new(entry)),
+                Some("zst") => Box::new(ZstdDecoder::new(entry)?),
+                Some("gz") => Box::new(GzDecoder::new(entry)),
+                _ => Box::new(entry),
             };
 
             let mut tar = TarArchive::new(tar_reader);
@@ -143,9 +153,7 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                     }
                     EntryType::Symlink => {
                         if let Some(link_target) = file.link_name()? {
-                            if let Some(parent) = dest_path.parent() {
-                                fs::create_dir_all(parent)?;
-                            }
+                            ensure_parent(&dest_path)?; // refactor: use helper
                             let cleaned_target = clean_link_target(&link_target);
                             let _ = fs::remove_file(&dest_path);
                             let final_target = if link_target.is_absolute() {
@@ -159,15 +167,10 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                     }
                     EntryType::Link => {
                         if let Some(link_target) = file.link_name()? {
-                            if let Some(parent) = dest_path.parent() {
-                                fs::create_dir_all(parent)?;
-                            }
+                            ensure_parent(&dest_path)?; // refactor: use helper
                             let cleaned_target = clean_link_target(&link_target);
-                            let abs_target = if link_target.is_absolute() {
-                                target_dir.join(&cleaned_target)
-                            } else {
-                                target_dir.join(&cleaned_target)
-                            };
+                            // refactor: collapse duplicate if/else arms — both produced target_dir.join(&cleaned_target)
+                            let abs_target = target_dir.join(&cleaned_target);
                             let _ = fs::remove_file(&dest_path);
                             if abs_target.exists() {
                                 if fs::hard_link(&abs_target, &dest_path).is_err() {
@@ -183,9 +186,7 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                         }
                     }
                     EntryType::Regular => {
-                        if let Some(parent) = dest_path.parent() {
-                            fs::create_dir_all(parent)?;
-                        }
+                        ensure_parent(&dest_path)?; // refactor: use helper
 
                         let permissions = file.header().mode()?;
                         let is_executable = (permissions & 0o111) != 0;
