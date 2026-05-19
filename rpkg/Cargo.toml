@@ -18,7 +18,7 @@ ureq = { version = "3.2.0", features = ["gzip"] }
 
 flate2 = "1.0"
 ar = "0.9"
-tar = "0.4.45"
+tar = "0.4.46"
 xz2 = "0.1"
 zstd = "0.13"
 
