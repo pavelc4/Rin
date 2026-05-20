@@ -1,3 +1,8 @@
+// SAFETY: JNI entry point called from Java/Kotlin (RpkgLib.execute).
+// #[unsafe(no_mangle)] + extern "system" required for JNI ABI.
+// EnvUnowned and JString/JClass references are valid only within the JNI call frame.
+// into_raw() releases ownership of the returned jstring to the JNI framework.
+
 use crate::manager::PackageManager;
 use jni::strings::JNIStr;
 use jni::EnvUnowned;
@@ -80,6 +85,9 @@ pub extern "system" fn Java_com_rin_rpkg_RpkgLib_execute<'local>(
         JString::from_str(env, result)
     });
 
+    // SAFETY: resolve() throws Java RuntimeException via ThrowRuntimeExAndDefault
+    // if a JNI error occurred. into_raw() hands the raw jstring to JNI; the caller
+    // (Kotlin RpkgLib.execute) owns the returned string.
     outcome
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
         .into_raw()

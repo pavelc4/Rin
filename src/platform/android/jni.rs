@@ -1,3 +1,11 @@
+// SAFETY: All functions with extern "system" ABI are JNI entry points called from Java.
+// #[unsafe(no_mangle)] is required for JNI symbol resolution.
+// EnvUnowned is only valid on the calling JNI thread and must not be stored or accessed
+// from other threads. JString/JClass/JByteArray parameters are local references valid
+// only for the duration of the JNI call. resolve::<ThrowRuntimeExAndDefault>() will
+// throw a Java RuntimeException on error; the Kotlin caller must check for exceptions
+// after each native call.
+
 use super::session::TerminalSession;
 use jni::objects::{JByteArray, JClass, JIntArray, JString};
 use jni::sys::{jint, jlong};
