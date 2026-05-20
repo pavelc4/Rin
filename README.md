@@ -13,25 +13,36 @@
 
 ## About
 
-**Rin Terminal** is a modern Android terminal emulator built with **Kotlin** and **Jetpack Compose**, integrated with a native pacman-style package manager written in **Rust**.
+**Rin Terminal** is a modern Android terminal emulator with a built-in package manager powered by the Termux ecosystem. Built with **Kotlin**, **Jetpack Compose**, and native **Rust** via JNI.
 
-It provides **seamless terminal access and robust package management** on Android 10+ devices, utilizing innovative execution bypasses to resolve modern Android restrictions, while prioritizing **clarity, performance, and minimal system overhead**.
+---
+
+## Screenshots
+
+<p align="center">
+    <img src="doc/image/ss01.jpg" width="30%" />
+    <img src="doc/image/ss02.jpg" width="30%" />
+    <img src="doc/image/ss03.jpg" width="30%" />
+</p>
+<p align="center">
+    <img src="doc/image/ss04.jpg" width="30%" />
+    <img src="doc/image/ss05.jpg" width="30%" />
+    <img src="doc/image/ss06.jpg" width="30%" />
+</p>
 
 ---
 
 ## Features
 
 - **Built-in Package Manager (`rpkg`)**  
-  A lightweight, pacman-style (`-S`, `-R`, etc.) package manager written in Rust, utilizing the vast Termux repository ecosystem directly within the app.
-
-- **Multicall Binary & Library Support**  
-  Intelligent proxy injection supports complex multicall binaries (like `coreutils`, `busybox`, `toybox`) and dynamic `.so` libraries right out of the box, seamlessly bypassing Android's W^X execution restrictions.
+  A lightweight, pacman-style package manager written in Rust that taps into the Termux repository ecosystem.  
+  → [Full rpkg documentation](doc/package-manager.md)
 
 - **Material 3 UI**  
-  Clean, modern, and highly responsive interface built natively with Jetpack Compose.
+  Clean, modern interface built with Jetpack Compose.
 
 - **Fast & Minimal**  
-  Lightweight architecture natively binding Rust binaries via JNI.
+  Native Rust binaries via JNI — lightweight architecture with minimal overhead.
 
 ---
 
@@ -48,44 +59,44 @@ It provides **seamless terminal access and robust package management** on Androi
 
 1. Clone the repository:
 
-   ```bash
-   git clone https://github.com/pavelc4/Rin
-   cd Rin
-   ```
+    ```bash
+    git clone https://github.com/pavelc4/Rin
+    cd Rin
+    ```
 
 2. Install `cargo-ndk` (required for building Rust libraries for Android):
 
-   ```bash
-   cargo install cargo-ndk
-   ```
+    ```bash
+    cargo install cargo-ndk
+    ```
 
 3. Set up Android NDK environment variable:
 
-   **Linux/macOS:**
-   ```bash
-   export ANDROID_NDK_HOME=/path/to/your/android/sdk/ndk/28.2.13676358
-   ```
+    **Linux/macOS:**
+    ```bash
+    export ANDROID_NDK_HOME=/path/to/your/android/sdk/ndk/28.2.13676358
+    ```
 
-   **Windows:**
-   ```cmd
-   set ANDROID_NDK_HOME=C:\Users\YourName\AppData\Local\Android\Sdk\ndk\28.2.13676358
-   ```
+    **Windows:**
+    ```cmd
+    set ANDROID_NDK_HOME=C:\Users\YourName\AppData\Local\Android\Sdk\ndk\28.2.13676358
+    ```
 
 4. Build the Rust JNI binary and compile the APK:
 
-   **Linux/macOS:**
-   ```bash
-   ./build_android.sh
-   cd android
-   ./gradlew assembleDebug
-   ```
+    **Linux/macOS:**
+    ```bash
+    ./build_android.sh
+    cd android
+    ./gradlew assembleDebug
+    ```
 
-   **Windows:**
-   ```cmd
-   build_android.bat
-   cd android
-   gradlew.bat assembleDebug
-   ```
+    **Windows:**
+    ```cmd
+    build_android.bat
+    cd android
+    gradlew.bat assembleDebug
+    ```
 
 ### Security Notice
 
@@ -104,7 +115,7 @@ It provides **seamless terminal access and robust package management** on Androi
 
 ## Credits
 
-- [Termux](https://termux.dev/) - The premier Android terminal emulator and Linux environment app that pioneered modern terminal capabilities on Android. `rpkg` leverages their incredible package repository ecosystem.
+- [Termux](https://termux.dev/) – The premier Android terminal emulator and Linux environment. `rpkg` leverages their incredible package repository ecosystem.
 
 ---
 
