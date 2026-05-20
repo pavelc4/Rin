@@ -91,32 +91,31 @@ fn resolve_interpreter(target_elf: &Path) -> (String, Vec<String>) {
 
     let interpreter_args: Vec<String> = parts.map(|p| p.to_string()).collect();
 
-    let interpreter = if cmd.ends_with("/env") {
-        match interpreter_args.first() {
+    let interpreter = match cmd {
+        c if c.ends_with("/env") => match interpreter_args.first() {
             Some(env_cmd) => PathBuf::from(DEFAULT_PREFIX)
                 .join("usr/bin")
                 .join(env_cmd)
                 .to_string_lossy()
                 .into_owned(),
             None => return default,
+        },
+        "/bin/sh" | "/system/bin/sh" => String::from("/system/bin/sh"),
+        _ => {
+            let name = std::path::Path::new(cmd)
+                .file_name()
+                .unwrap_or(std::ffi::OsStr::new(cmd));
+            PathBuf::from(DEFAULT_PREFIX)
+                .join("usr/bin")
+                .join(name)
+                .to_string_lossy()
+                .into_owned()
         }
-    } else if cmd == "/bin/sh" || cmd == "/system/bin/sh" {
-        String::from("/system/bin/sh")
-    } else {
-        let name = std::path::Path::new(cmd)
-            .file_name()
-            .unwrap_or(std::ffi::OsStr::new(cmd));
-        PathBuf::from(DEFAULT_PREFIX)
-            .join("usr/bin")
-            .join(name)
-            .to_string_lossy()
-            .into_owned()
     };
 
-    let args = if cmd.ends_with("/env") {
-        interpreter_args.into_iter().skip(1).collect()
-    } else {
-        interpreter_args
+    let args = match cmd {
+        c if c.ends_with("/env") => interpreter_args.into_iter().skip(1).collect(),
+        _ => interpreter_args,
     };
 
     (interpreter, args)
@@ -187,15 +186,7 @@ fn execute_proxied_binary(exe_path: &Path, exe_name: &str, args: std::env::Args)
 }
 
 
-fn main() -> anyhow::Result<()> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .format_timestamp(None)
-        .init();
-
-    handle_multicall();
-
-    let cli = Cli::parse();
+fn run_operation(cli: Cli) -> anyhow::Result<()> {
     let mut pm = PackageManager::new(&cli.prefix)?;
 
     if cli.sync {
@@ -250,4 +241,14 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .format_timestamp(None)
+        .init();
+
+    handle_multicall();
+    run_operation(Cli::parse())
 }

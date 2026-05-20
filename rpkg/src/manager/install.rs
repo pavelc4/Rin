@@ -130,13 +130,11 @@ impl PackageManager {
 
                     let mut bar = String::with_capacity(bar_len);
                     for i in 0..bar_len {
-                        if i < filled_len {
-                            bar.push('#');
-                        } else if i == filled_len {
-                            bar.push('C');
-                        } else {
-                            bar.push('-');
-                        }
+                        bar.push(match i.cmp(&filled_len) {
+                            std::cmp::Ordering::Less => '#',
+                            std::cmp::Ordering::Equal => 'C',
+                            std::cmp::Ordering::Greater => '-',
+                        });
                     }
 
                     print!(
