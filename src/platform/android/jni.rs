@@ -489,3 +489,15 @@ pub extern "system" fn Java_com_rin_RinLib_clearDirty(
         engine.buffer_mut().grid_mut().clear_dirty();
     });
 }
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_rin_RinLib_isAlive(
+    _env: EnvUnowned,
+    _class: JClass,
+    handle: jlong,
+) -> bool {
+    with_session(handle, |session| {
+        session.is_alive.load(std::sync::atomic::Ordering::SeqCst)
+    })
+    .unwrap_or(false)
+}

@@ -38,7 +38,8 @@ fun TerminalSurface(
     cursorBlinkEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onInput: (ByteArray) -> Unit = {},
-    onViewReady: (android.view.View) -> Unit = {}
+    onViewReady: (android.view.View) -> Unit = {},
+    onClose: () -> Unit = {}
 ) {
     var fontSize by remember { mutableFloatStateOf(8f) }
     var ctrlState by remember { mutableStateOf(ctrlPressed) }
@@ -94,6 +95,7 @@ fun TerminalSurface(
                 this.ctrlPressedProvider = { ctrlState }
                 this.cursorVisibleProvider = { cursorVisible }
                 this.colorScheme = colorScheme
+                this.onCloseCallback = onClose
                 viewRef = this
                 onViewReady(this)
             }
@@ -108,6 +110,7 @@ fun TerminalSurface(
             view.ctrlPressedProvider = { ctrlState }
             view.cursorVisibleProvider = { cursorVisible }
             view.colorScheme = colorScheme
+            view.onCloseCallback = onClose
             view.invalidate()
         }
     )
@@ -122,6 +125,7 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
         }
     var onInputCallback: (ByteArray) -> Unit = {}
     var onActivityCallback: () -> Unit = {}
+    var onCloseCallback: () -> Unit = {}
     var ctrlPressedProvider: () -> Boolean = { false }
     var cursorVisibleProvider: () -> Boolean = { true }
     var colorScheme: TerminalColorScheme? = null
@@ -389,6 +393,12 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
 
             private fun sendToTerminal(text: String) {
                 if (text.isEmpty()) return
+                if (engineHandle != 0L && !RinLib.isAlive(engineHandle)) {
+                    if (text.contains("\n") || text.contains("\r")) {
+                        onCloseCallback()
+                    }
+                    return
+                }
                 val data = if (ctrlPressedProvider() && text.length == 1) {
                     val char = text[0].lowercaseChar()
                     if (char in 'a'..'z') {
@@ -408,6 +418,10 @@ class TerminalCanvasView(context: Context) : View(context), View.OnCreateContext
                     onActivityCallback()
                     when (event.keyCode) {
                         KeyEvent.KEYCODE_ENTER -> {
+                            if (engineHandle != 0L && !RinLib.isAlive(engineHandle)) {
+                                onCloseCallback()
+                                return true
+                            }
                             onInputCallback("\r".toByteArray())
                             invalidate()
                             return true

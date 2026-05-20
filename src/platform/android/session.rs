@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::renderer::AndroidRenderer;
 use crate::{Pty, TerminalEngine};
 use std::sync::{Arc, Mutex};
@@ -6,6 +7,7 @@ use std::thread;
 pub struct TerminalSession {
     pub engine: Arc<Mutex<TerminalEngine>>,
     pub pty: Arc<Mutex<Pty>>,
+    pub is_alive: Arc<AtomicBool>,
 }
 
 impl TerminalSession {
@@ -31,6 +33,8 @@ impl TerminalSession {
 
         let pty_clone = pty.clone();
         let engine_clone = engine.clone();
+        let is_alive = Arc::new(AtomicBool::new(true));
+        let is_alive_clone = is_alive.clone();
 
         thread::spawn(move || {
             let mut buffer = [0u8; 16384];
@@ -49,6 +53,10 @@ impl TerminalSession {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
                         log::info!("PTY closed (EOF)");
+                        let msg = "\r\n\x1b[1;31m[Process completed (EOF) - Press Enter to close]\x1b[0m\r\n";
+                        let mut engine_guard = engine_clone.lock().unwrap();
+                        let _ = engine_guard.write(msg.as_bytes());
+                        is_alive_clone.store(false, Ordering::SeqCst);
                         break;
                     }
                     Ok(n) => {
@@ -59,13 +67,17 @@ impl TerminalSession {
                     }
                     Err(e) => {
                         log::error!("Error reading from PTY: {}", e);
+                        let msg = format!("\r\n\x1b[1;31m[Process error: {} - Press Enter to close]\x1b[0m\r\n", e);
+                        let mut engine_guard = engine_clone.lock().unwrap();
+                        let _ = engine_guard.write(msg.as_bytes());
+                        is_alive_clone.store(false, Ordering::SeqCst);
                         break;
                     }
                 }
             }
         });
 
-        Ok(Self { engine, pty })
+        Ok(Self { engine, pty, is_alive })
     }
 
     pub fn write(&self, data: &[u8]) -> anyhow::Result<usize> {

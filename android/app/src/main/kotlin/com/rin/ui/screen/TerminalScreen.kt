@@ -132,7 +132,10 @@ fun TerminalScreen(
                     }
                 }
             },
-            onViewReady = { view -> terminalView = view }
+            onViewReady = { view -> terminalView = view },
+            onClose = {
+                sessionManager.removeSession(sessionManager.activeIndex)
+            }
         )
 
         ExtraKeysBar(
