@@ -16,7 +16,6 @@ const _: () = assert!(
     "binary patch strings must be the same byte length"
 );
 
-// refactor: extract repeated fs::create_dir_all(parent) pattern into helper
 fn ensure_parent(path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -28,16 +27,14 @@ fn strip_upstream(raw: &str) -> Option<&str> {
     let normalized = raw.trim_start_matches("./");
 
     if let Some(stripped) = normalized.strip_prefix(PKG_EMBEDDED_PREFIX) {
-        // refactor: flatten nested if into single return expression
-        return if stripped.is_empty() { None } else { Some(stripped) };
+        return (!stripped.is_empty()).then_some(stripped);
     }
     if normalized.starts_with("data/") || normalized.is_empty() || normalized == "." {
-        return None; // refactor: early return instead of else-if chain
+        return None;
     }
     Some(normalized)
 }
 
-// refactor: extract ELF interpreter patching to flatten 4-level nested if-let in patch_content
 fn patch_elf_interpreter(out: &mut Vec<u8>) {
     if !out.starts_with(b"\x7FELF") {
         return;
@@ -100,7 +97,7 @@ fn patch_content(content: &[u8]) -> Vec<u8> {
         out = temp;
     }
 
-    patch_elf_interpreter(&mut out); // refactor: call extracted helper
+    patch_elf_interpreter(&mut out);
     out
 }
 
@@ -153,7 +150,7 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                     }
                     EntryType::Symlink => {
                         if let Some(link_target) = file.link_name()? {
-                            ensure_parent(&dest_path)?; // refactor: use helper
+                            ensure_parent(&dest_path)?;
                             let cleaned_target = clean_link_target(&link_target);
                             let _ = fs::remove_file(&dest_path);
                             let final_target = if link_target.is_absolute() {
@@ -167,9 +164,8 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                     }
                     EntryType::Link => {
                         if let Some(link_target) = file.link_name()? {
-                            ensure_parent(&dest_path)?; // refactor: use helper
+                            ensure_parent(&dest_path)?;
                             let cleaned_target = clean_link_target(&link_target);
-                            // refactor: collapse duplicate if/else arms — both produced target_dir.join(&cleaned_target)
                             let abs_target = target_dir.join(&cleaned_target);
                             let _ = fs::remove_file(&dest_path);
                             if abs_target.exists() {
@@ -186,7 +182,7 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                         }
                     }
                     EntryType::Regular => {
-                        ensure_parent(&dest_path)?; // refactor: use helper
+                        ensure_parent(&dest_path)?;
 
                         let permissions = file.header().mode()?;
                         let is_executable = (permissions & 0o111) != 0;
