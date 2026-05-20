@@ -1,7 +1,9 @@
 use crate::manager::PackageManager;
+use jni::strings::JNIStr;
 use jni::EnvUnowned;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
+use std::ffi::CString;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_rin_rpkg_RpkgLib_execute<'local>(
@@ -11,16 +13,33 @@ pub extern "system" fn Java_com_rin_rpkg_RpkgLib_execute<'local>(
     op: JString<'local>,
     args: JString<'local>,
 ) -> jstring {
-    let prefix_str = prefix.to_string();
-    let op_str = op.to_string();
-    let args_str = args.to_string();
     let outcome = env.with_env(|env| -> Result<JString<'_>, jni::errors::Error> {
+        let prefix_str: String = {
+            #[allow(deprecated)]
+            let s = env.get_string(&prefix)?;
+            s.into()
+        };
+        let op_str: String = {
+            #[allow(deprecated)]
+            let s = env.get_string(&op)?;
+            s.into()
+        };
+        let args_str: String = {
+            #[allow(deprecated)]
+            let s = env.get_string(&args)?;
+            s.into()
+        };
+
         let mut pm = match PackageManager::new(&prefix_str) {
             Ok(pm) => pm,
             Err(e) => {
                 let msg = format!("Failed to initialize PackageManager: {}", e);
                 log::error!("{}", msg);
-                return JString::from_str(env, msg);
+                let class_cstr = CString::new("java/lang/RuntimeException").unwrap();
+                let msg_cstr = CString::new(msg).unwrap();
+                let class = env.find_class(JNIStr::from_cstr(&class_cstr).unwrap())?;
+                let _ = env.throw_new(&class, JNIStr::from_cstr(&msg_cstr).unwrap());
+                return Err(jni::errors::Error::JavaException);
             }
         };
 
