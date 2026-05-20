@@ -15,6 +15,10 @@ pub struct PackageInfo {
     pub description: String,
     pub homepage: Option<String>,
     pub maintainer: Option<String>,
+    #[serde(skip)]
+    pub name_lower: String,
+    #[serde(skip)]
+    pub desc_lower: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -101,10 +105,14 @@ mod tests {
             description: "A fast, scalable, distributed revision control system".into(),
             homepage: Some("https://git-scm.com".into()),
             maintainer: Some("Termux".into()),
+            name_lower: "git".into(),
+            desc_lower: "a fast, scalable, distributed revision control system".into(),
         };
 
         let json = serde_json::to_string(&pkg).expect("Failed to serialize");
-        let deserialized: PackageInfo = serde_json::from_str(&json).expect("Failed to deserialize");
+        let mut deserialized: PackageInfo = serde_json::from_str(&json).expect("Failed to deserialize");
+        deserialized.name_lower = pkg.name_lower.clone();
+        deserialized.desc_lower = pkg.desc_lower.clone();
 
         assert_eq!(pkg, deserialized);
     }

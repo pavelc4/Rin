@@ -73,8 +73,10 @@ impl PackageIndex {
     }
 
     fn build_package(fields: &HashMap<String, String>) -> Option<PackageInfo> {
+        let name = fields.get("Package")?.clone();
+        let description = fields.get("Description").cloned().unwrap_or_default();
         Some(PackageInfo {
-            name: fields.get("Package")?.clone(),
+            name: name.clone(),
             version: fields.get("Version")?.clone(),
             architecture: fields.get("Architecture").cloned().unwrap_or_default(),
             filename: fields.get("Filename")?.clone(),
@@ -87,9 +89,11 @@ impl PackageIndex {
             depends: Self::parse_depends(fields.get("Depends")),
             provides: Self::parse_simple_list(fields.get("Provides")),
             conflicts: Self::parse_simple_list(fields.get("Conflicts")),
-            description: fields.get("Description").cloned().unwrap_or_default(),
+            description: description.clone(),
             homepage: fields.get("Homepage").cloned(),
             maintainer: fields.get("Maintainer").cloned(),
+            name_lower: name.to_lowercase(),
+            desc_lower: description.to_lowercase(),
         })
     }
 
@@ -138,10 +142,7 @@ impl PackageIndex {
         let query = query.to_lowercase();
         self.packages
             .values()
-            .filter(|p| {
-                p.name.to_lowercase().contains(&query)
-                    || p.description.to_lowercase().contains(&query)
-            })
+            .filter(|p| p.name_lower.contains(&query) || p.desc_lower.contains(&query))
             .collect()
     }
 
