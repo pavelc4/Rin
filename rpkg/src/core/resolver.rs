@@ -36,19 +36,15 @@ impl<'a> Resolver<'a> {
             log::warn!("Circular dependency detected involving: {}", package_name);
             return Ok(());
         }
-        let pkg = match self.index.get(package_name) {
-            Some(p) => p,
-            None => {
-                let provider = self
-                    .index
+        let pkg = self
+            .index
+            .get(package_name)
+            .or_else(|| {
+                self.index
                     .iter()
-                    .find(|p| p.provides.contains(&package_name.to_string()));
-                match provider {
-                    Some(p) => p,
-                    None => anyhow::bail!("Package not found in index: {}", package_name),
-                }
-            }
-        };
+                    .find(|p| p.provides.contains(&package_name.to_string()))
+            })
+            .ok_or_else(|| anyhow::anyhow!("Package not found in index: {}", package_name))?;
 
         in_stack.insert(pkg.name.clone());
 
