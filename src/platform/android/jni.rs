@@ -5,7 +5,20 @@ use jni::EnvUnowned;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, Once, OnceLock, RwLock};
+
+static LOGGER_INIT: Once = Once::new();
+
+fn ensure_logger() {
+    #[cfg(feature = "android")]
+    LOGGER_INIT.call_once(|| {
+        android_logger::init_once(
+            android_logger::Config::default()
+                .with_max_level(log::LevelFilter::Debug)
+                .with_tag("RinNative"),
+        );
+    });
+}
 
 type EngineHandle = jlong;
 
@@ -89,6 +102,51 @@ fn create_banner(
     banner
 }
 
+fn create_engine_inner(
+    width: jint,
+    height: jint,
+    font_size: f32,
+    home_dir: &str,
+    username: &str,
+    has_storage_permission: bool,
+    is_root: bool,
+    su_path: Option<&str>,
+) -> jlong {
+    ensure_logger();
+
+    let username_str = if username.is_empty() { "user" } else { username };
+
+    let label = if is_root { "Root Engine" } else { "Engine" };
+    log::info!(
+        "Creating {}: {}x{}, HOME={}, USER={}",
+        label,
+        width,
+        height,
+        home_dir,
+        username_str
+    );
+
+    let session = TerminalSession::new(
+        width as usize,
+        height as usize,
+        font_size,
+        home_dir,
+        username_str,
+        su_path,
+    );
+
+    let buffer = session.get_buffer();
+    let mut engine = buffer.lock().unwrap();
+    let banner = create_banner(is_root, has_storage_permission, home_dir, username_str);
+    let _ = engine.write(banner.as_bytes());
+
+    let handle = NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
+    get_sessions().write().unwrap().insert(handle, session);
+
+    log::info!("{} created with handle: {}", label, handle);
+    handle
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_rin_RinLib_createEngine(
     mut env: EnvUnowned,
@@ -100,51 +158,18 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
     username: JString,
     has_storage_permission: jint,
 ) -> jlong {
-    #[cfg(feature = "android")]
-    android_logger::init_once(
-        android_logger::Config::default()
-            .with_max_level(log::LevelFilter::Debug)
-            .with_tag("RinNative"),
-    );
-
     let home_dir_str = get_jstring(&mut env, &home_dir);
-    let mut username_str = get_jstring(&mut env, &username);
-    if username_str.is_empty() {
-        username_str = "user".to_string();
-    }
-
-    log::info!(
-        "Creating Engine: {}x{}, HOME={}, USER={}",
+    let username_str = get_jstring(&mut env, &username);
+    create_engine_inner(
         width,
         height,
-        home_dir_str,
-        username_str
-    );
-
-    let session = TerminalSession::new(
-        width as usize,
-        height as usize,
         font_size,
         &home_dir_str,
         &username_str,
-        None,
-    );
-
-    let buffer = session.get_buffer();
-    let mut engine = buffer.lock().unwrap();
-    let banner = create_banner(
-        false,
         has_storage_permission != 0,
-        &home_dir_str,
-        &username_str,
-    );
-    let _ = engine.write(banner.as_bytes());
-
-    let handle = NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
-    get_sessions().write().unwrap().insert(handle, session);
-
-    log::info!("Engine created with handle: {}", handle);
-    handle
+        false,
+        None,
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -159,54 +184,19 @@ pub extern "system" fn Java_com_rin_RinLib_createRootEngine(
     has_storage_permission: jint,
     su_path: JString,
 ) -> jlong {
-    #[cfg(feature = "android")]
-    android_logger::init_once(
-        android_logger::Config::default()
-            .with_max_level(log::LevelFilter::Debug)
-            .with_tag("RinNative"),
-    );
-
     let home_dir_str = get_jstring(&mut env, &home_dir);
-    let mut username_str = get_jstring(&mut env, &username);
+    let username_str = get_jstring(&mut env, &username);
     let su_path_str = get_jstring(&mut env, &su_path);
-
-    if username_str.is_empty() {
-        username_str = "user".to_string();
-    }
-
-    log::info!(
-        "Creating Root Engine: {}x{}, HOME={}, USER={}, SU={}",
+    create_engine_inner(
         width,
         height,
-        home_dir_str,
-        username_str,
-        su_path_str
-    );
-
-    let session = TerminalSession::new(
-        width as usize,
-        height as usize,
         font_size,
         &home_dir_str,
         &username_str,
-        Some(&su_path_str),
-    );
-
-    let buffer = session.get_buffer();
-    let mut engine = buffer.lock().unwrap();
-    let banner = create_banner(
-        true,
         has_storage_permission != 0,
-        &home_dir_str,
-        &username_str,
-    );
-    let _ = engine.write(banner.as_bytes());
-
-    let handle = NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
-    get_sessions().write().unwrap().insert(handle, session);
-
-    log::info!("Root engine created with handle: {}", handle);
-    handle
+        true,
+        Some(&su_path_str),
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -387,44 +377,6 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
     .flatten()
     .unwrap_or_default();
     env.with_env(|env| env.new_string(result))
-        .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
-}
-
-                let style = &cell.style;
-                let (fg, bg) = if style.reverse {
-                    (&style.bg, &style.fg)
-                } else {
-                    (&style.fg, &style.bg)
-                };
-
-                let _ = write!(
-                    result,
-                    "{}\t{},{},{}\t{},{},{}",
-                    cell.character, fg.r, fg.g, fg.b, bg.r, bg.g, bg.b
-                );
-                result.push('\t');
-
-                if style.bold {
-                    result.push('b');
-                }
-                if style.italic {
-                    result.push('i');
-                }
-                if style.dim {
-                    result.push('d');
-                }
-                if cell.wide {
-                    result.push('w');
-                }
-
-                result.push('\n');
-            }
-            return env
-                .with_env(|env| env.new_string(result))
-                .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-        }
-    }
-    env.with_env(|env| env.new_string(""))
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
 }
 
