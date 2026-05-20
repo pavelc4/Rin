@@ -38,6 +38,7 @@ impl TerminalEngine {
             self.buffer.execute_command(cmd)?;
         }
 
+        self.renderer.mark_dirty();
         Ok(())
     }
 

@@ -113,7 +113,7 @@ impl AnsiParser {
 
         self.parser.advance(&mut self.performer, data);
 
-        Ok(self.performer.commands.clone())
+        Ok(std::mem::take(&mut self.performer.commands))
     }
 }
 

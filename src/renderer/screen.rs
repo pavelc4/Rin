@@ -18,24 +18,17 @@ impl Default for ScreenRenderer {
 }
 
 impl Renderer for ScreenRenderer {
-    fn render(&mut self, context: &RenderContext) -> Result<()> {
+    fn render(&mut self, _context: &RenderContext) -> Result<()> {
         if !self.dirty {
             return Ok(());
         }
 
-        let buffer = context.buffer;
-        let grid = buffer.grid();
-
-        for y in 0..context.height {
-            if let Some(row) = grid.row(y) {
-                for (x, cell) in row.iter().enumerate() {
-                    let _ = (x, cell);
-                }
-            }
-        }
-
         self.dirty = false;
         Ok(())
+    }
+
+    fn mark_dirty(&mut self) {
+        self.dirty = true;
     }
 }
 
@@ -86,6 +79,10 @@ impl Renderer for AndroidRenderer {
 
         self.dirty = false;
         Ok(())
+    }
+
+    fn mark_dirty(&mut self) {
+        self.dirty = true;
     }
 }
 

@@ -10,6 +10,7 @@ pub struct RenderContext<'a> {
 
 pub trait Renderer {
     fn render(&mut self, context: &RenderContext) -> Result<()>;
+    fn mark_dirty(&mut self) {}
 }
 
 pub use screen::{ScreenRenderer, AndroidRenderer};
