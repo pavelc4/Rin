@@ -1,5 +1,5 @@
 use super::session::TerminalSession;
-use jni::objects::{JByteArray, JClass, JIntArray, JObject, JString};
+use jni::objects::{JByteArray, JClass, JIntArray, JString};
 use jni::sys::{jint, jlong};
 use jni::EnvUnowned;
 use std::collections::HashMap;
@@ -16,6 +16,21 @@ fn get_sessions() -> Arc<RwLock<HashMap<EngineHandle, TerminalSession>>> {
     SESSIONS
         .get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
         .clone()
+}
+
+fn get_jstring(env: &mut EnvUnowned<'_>, s: &JString<'_>) -> String {
+    env.with_env(|env| -> jni::errors::Result<String> {
+        #[allow(deprecated)]
+        let java_str = env.get_string(s).map(|s| String::from(s))?;
+        Ok(java_str)
+    })
+    .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
+}
+
+fn with_session<R>(handle: jlong, f: impl FnOnce(&TerminalSession) -> R) -> Option<R> {
+    let sessions = get_sessions();
+    let sessions = sessions.read().unwrap();
+    sessions.get(&handle).map(f)
 }
 
 fn create_banner(
@@ -92,24 +107,8 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
             .with_tag("RinNative"),
     );
 
-    let home_dir_str: String = env
-        .with_env(|env| -> jni::errors::Result<String> {
-            let jstr: jni::objects::JString = home_dir;
-            #[allow(deprecated)]
-            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
-            Ok(java_str)
-        })
-        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-
-    let mut username_str: String = env
-        .with_env(|env| -> jni::errors::Result<String> {
-            let jstr: jni::objects::JString = username;
-            #[allow(deprecated)]
-            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
-            Ok(java_str)
-        })
-        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-
+    let home_dir_str = get_jstring(&mut env, &home_dir);
+    let mut username_str = get_jstring(&mut env, &username);
     if username_str.is_empty() {
         username_str = "user".to_string();
     }
@@ -142,8 +141,7 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
     let _ = engine.write(banner.as_bytes());
 
     let handle = NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
-    let sessions_arc = get_sessions();
-    sessions_arc.write().unwrap().insert(handle, session);
+    get_sessions().write().unwrap().insert(handle, session);
 
     log::info!("Engine created with handle: {}", handle);
     handle
@@ -168,32 +166,9 @@ pub extern "system" fn Java_com_rin_RinLib_createRootEngine(
             .with_tag("RinNative"),
     );
 
-    let home_dir_str: String = env
-        .with_env(|env| -> jni::errors::Result<String> {
-            let jstr: jni::objects::JString = home_dir;
-            #[allow(deprecated)]
-            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
-            Ok(java_str)
-        })
-        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-
-    let mut username_str: String = env
-        .with_env(|env| -> jni::errors::Result<String> {
-            let jstr: jni::objects::JString = username;
-            #[allow(deprecated)]
-            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
-            Ok(java_str)
-        })
-        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-
-    let su_path_str: String = env
-        .with_env(|env| -> jni::errors::Result<String> {
-            let jstr: jni::objects::JString = su_path;
-            #[allow(deprecated)]
-            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
-            Ok(java_str)
-        })
-        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+    let home_dir_str = get_jstring(&mut env, &home_dir);
+    let mut username_str = get_jstring(&mut env, &username);
+    let su_path_str = get_jstring(&mut env, &su_path);
 
     if username_str.is_empty() {
         username_str = "user".to_string();
@@ -228,8 +203,7 @@ pub extern "system" fn Java_com_rin_RinLib_createRootEngine(
     let _ = engine.write(banner.as_bytes());
 
     let handle = NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
-    let sessions_arc = get_sessions();
-    sessions_arc.write().unwrap().insert(handle, session);
+    get_sessions().write().unwrap().insert(handle, session);
 
     log::info!("Root engine created with handle: {}", handle);
     handle
@@ -241,8 +215,7 @@ pub extern "system" fn Java_com_rin_RinLib_destroyEngine(
     _class: JClass,
     handle: jlong,
 ) {
-    let sessions_arc = get_sessions();
-    sessions_arc.write().unwrap().remove(&handle);
+    get_sessions().write().unwrap().remove(&handle);
     log::info!("Engine destroyed: {}", handle);
 }
 
@@ -255,20 +228,14 @@ pub extern "system" fn Java_com_rin_RinLib_write(
 ) -> jint {
     let outcome = env.with_env(|env| env.convert_byte_array(&data));
     let bytes: Vec<u8> = outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-    let bytes: &[u8] = &bytes;
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
-        match session.write(bytes) {
-            Ok(_) => 0,
-            Err(e) => {
-                log::error!("Failed to write to PTY: {}", e);
-                -1
-            }
+    with_session(handle, |session| match session.write(&bytes) {
+        Ok(_) => 0,
+        Err(e) => {
+            log::error!("Failed to write to PTY: {}", e);
+            -1
         }
-    } else {
-        -2
-    }
+    })
+    .unwrap_or(-2)
 }
 
 #[unsafe(no_mangle)]
@@ -280,20 +247,14 @@ pub extern "system" fn Java_com_rin_RinLib_writeToEngine(
 ) -> jint {
     let outcome = env.with_env(|env| env.convert_byte_array(&data));
     let bytes: Vec<u8> = outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-    let bytes: &[u8] = &bytes;
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
-        match session.write_to_engine(bytes) {
-            Ok(_) => 0,
-            Err(e) => {
-                log::error!("Failed to write to engine: {}", e);
-                -1
-            }
+    with_session(handle, |session| match session.write_to_engine(&bytes) {
+        Ok(_) => 0,
+        Err(e) => {
+            log::error!("Failed to write to engine: {}", e);
+            -1
         }
-    } else {
-        -2
-    }
+    })
+    .unwrap_or(-2)
 }
 
 #[unsafe(no_mangle)]
@@ -302,16 +263,11 @@ pub extern "system" fn Java_com_rin_RinLib_render(
     _class: JClass,
     handle: jlong,
 ) -> jint {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
-        match session.render() {
-            Ok(_) => 0,
-            Err(_) => -1,
-        }
-    } else {
-        -1
-    }
+    with_session(handle, |session| match session.render() {
+        Ok(_) => 0,
+        Err(_) => -1,
+    })
+    .unwrap_or(-1)
 }
 
 #[unsafe(no_mangle)]
@@ -322,16 +278,11 @@ pub extern "system" fn Java_com_rin_RinLib_resize(
     width: jint,
     height: jint,
 ) -> jint {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
-        match session.resize(width as usize, height as usize) {
-            Ok(_) => 0,
-            Err(_) => -1,
-        }
-    } else {
-        -1
-    }
+    with_session(handle, |session| match session.resize(width as usize, height as usize) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    })
+    .unwrap_or(-1)
 }
 
 #[unsafe(no_mangle)]
@@ -341,21 +292,16 @@ pub extern "system" fn Java_com_rin_RinLib_getLine<'local>(
     handle: jlong,
     y: jint,
 ) -> JString<'local> {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    let line = with_session(handle, |session| {
         let buffer = session.get_buffer();
         let engine = buffer.lock().unwrap();
         let buffer = engine.buffer();
         let grid = buffer.grid();
-        if let Some(row) = grid.row(y as usize) {
-            let line: String = row.iter().map(|c| c.character).collect();
-            return env
-                .with_env(|env| env.new_string(line))
-                .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-        }
-    }
-    env.with_env(|env| env.new_string(""))
+        grid.row(y as usize).map(|row| row.iter().map(|c| c.character).collect::<String>())
+    })
+    .flatten()
+    .unwrap_or_default();
+    env.with_env(|env| env.new_string(line))
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
 }
 
@@ -365,15 +311,12 @@ pub extern "system" fn Java_com_rin_RinLib_getCursorX(
     _class: JClass,
     handle: jlong,
 ) -> jint {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    with_session(handle, |session| {
         let buffer = session.get_buffer();
         let engine = buffer.lock().unwrap();
         engine.buffer().cursor_pos().0 as jint
-    } else {
-        0
-    }
+    })
+    .unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
@@ -382,15 +325,12 @@ pub extern "system" fn Java_com_rin_RinLib_getCursorY(
     _class: JClass,
     handle: jlong,
 ) -> jint {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    with_session(handle, |session| {
         let buffer = session.get_buffer();
         let engine = buffer.lock().unwrap();
         engine.buffer().cursor_pos().1 as jint
-    } else {
-        0
-    }
+    })
+    .unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
@@ -400,19 +340,55 @@ pub extern "system" fn Java_com_rin_RinLib_getCellData<'local>(
     handle: jlong,
     y: jint,
 ) -> JString<'local> {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    let result = with_session(handle, |session| {
         let buffer = session.get_buffer();
         let engine = buffer.lock().unwrap();
         let buffer = engine.buffer();
         let grid = buffer.grid();
-        if let Some(row) = grid.row(y as usize) {
+        grid.row(y as usize).map(|row| {
             let mut result = String::with_capacity(row.len() * 32);
             for cell in row.iter() {
                 if cell.wide_spacer {
                     continue;
                 }
+
+                let style = &cell.style;
+                let (fg, bg) = if style.reverse {
+                    (&style.bg, &style.fg)
+                } else {
+                    (&style.fg, &style.bg)
+                };
+
+                let _ = write!(
+                    result,
+                    "{}\t{},{},{}\t{},{},{}",
+                    cell.character, fg.r, fg.g, fg.b, bg.r, bg.g, bg.b
+                );
+                result.push('\t');
+
+                if style.bold {
+                    result.push('b');
+                }
+                if style.italic {
+                    result.push('i');
+                }
+                if style.dim {
+                    result.push('d');
+                }
+                if cell.wide {
+                    result.push('w');
+                }
+
+                result.push('\n');
+            }
+            result
+        })
+    })
+    .flatten()
+    .unwrap_or_default();
+    env.with_env(|env| env.new_string(result))
+        .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
+}
 
                 let style = &cell.style;
                 let (fg, bg) = if style.reverse {
@@ -459,14 +435,12 @@ pub extern "system" fn Java_com_rin_RinLib_getCellDataOptimized<'local>(
     handle: jlong,
     y: jint,
 ) -> JIntArray<'local> {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    let data = with_session(handle, |session| {
         let buffer = session.get_buffer();
         let engine = buffer.lock().unwrap();
         let buffer = engine.buffer();
         let grid = buffer.grid();
-        if let Some(row) = grid.row(y as usize) {
+        grid.row(y as usize).map(|row| {
             let mut data = Vec::with_capacity(row.len() * 3);
             for cell in row.iter() {
                 if cell.wide_spacer {
@@ -501,19 +475,16 @@ pub extern "system" fn Java_com_rin_RinLib_getCellDataOptimized<'local>(
                 data.push(fg_packed as i32);
                 data.push(bg_packed as i32);
             }
-
-            return env
-                .with_env(|env| -> jni::errors::Result<jni::objects::JIntArray> {
-                    let jarray = env.new_int_array(data.len())?;
-                    env.set_int_array_region(&jarray, 0, &data)?;
-                    Ok(jarray)
-                })
-                .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-        }
-    }
+            data
+        })
+    })
+    .flatten()
+    .unwrap_or_default();
 
     env.with_env(|env| -> jni::errors::Result<jni::objects::JIntArray> {
-        Ok(env.new_int_array(0)?)
+        let jarray = env.new_int_array(data.len())?;
+        env.set_int_array_region(&jarray, 0, &data)?;
+        Ok(jarray)
     })
     .resolve::<jni::errors::ThrowRuntimeExAndDefault>()
 }
@@ -524,15 +495,12 @@ pub extern "system" fn Java_com_rin_RinLib_hasDirtyRows(
     _class: JClass,
     handle: jlong,
 ) -> bool {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    with_session(handle, |session| {
         let buffer = session.get_buffer();
         let engine = buffer.lock().unwrap();
         engine.buffer().grid().has_dirty_rows()
-    } else {
-        false
-    }
+    })
+    .unwrap_or(false)
 }
 
 #[unsafe(no_mangle)]
@@ -541,11 +509,9 @@ pub extern "system" fn Java_com_rin_RinLib_clearDirty(
     _class: JClass,
     handle: jlong,
 ) {
-    let sessions_arc = get_sessions();
-    let sessions = sessions_arc.read().unwrap();
-    if let Some(session) = sessions.get(&handle) {
+    with_session(handle, |session| {
         let buffer = session.get_buffer();
         let mut engine = buffer.lock().unwrap();
         engine.buffer_mut().grid_mut().clear_dirty();
-    }
+    });
 }
