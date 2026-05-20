@@ -73,9 +73,6 @@ class MainActivity : ComponentActivity() {
             REQUEST_FILE="$prefix/.rin_request_perm"
 
             if [ -f "${'$'}PERM_FILE" ]; then
-                echo ""
-                echo "\033[32m✓ Storage permission already granted!\033[0m"
-                echo ""
                 exit 0
             fi
 
