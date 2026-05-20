@@ -16,24 +16,18 @@ impl TerminalSession {
         home_dir: &str,
         username: &str,
         su_path: Option<&str>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let renderer = Box::new(AndroidRenderer::new(font_size));
         let engine = Arc::new(Mutex::new(TerminalEngine::new(width, height, renderer)));
 
         let shell = su_path.unwrap_or("/system/bin/sh");
-        let pty = match Pty::spawn(
+        let pty = Arc::new(Mutex::new(Pty::spawn(
             shell,
             width as u16,
             height as u16,
             Some(home_dir),
             Some(username),
-        ) {
-            Ok(pty) => Arc::new(Mutex::new(pty)),
-            Err(e) => {
-                log::error!("Failed to spawn PTY: {}", e);
-                panic!("PTY spawn failed: {}", e);
-            }
-        };
+        )?));
 
         let pty_clone = pty.clone();
         let engine_clone = engine.clone();
@@ -58,8 +52,6 @@ impl TerminalSession {
                         break;
                     }
                     Ok(n) => {
-                        thread::sleep(std::time::Duration::from_millis(2));
-
                         let mut engine_guard = engine_clone.lock().unwrap();
                         if let Err(e) = engine_guard.write(&buffer[..n]) {
                             log::error!("Failed to write to engine: {}", e);
@@ -73,7 +65,7 @@ impl TerminalSession {
             }
         });
 
-        Self { engine, pty }
+        Ok(Self { engine, pty })
     }
 
     pub fn write(&self, data: &[u8]) -> anyhow::Result<usize> {
