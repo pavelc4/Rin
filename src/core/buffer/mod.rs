@@ -264,7 +264,6 @@ impl TerminalBuffer {
     }
 
     pub fn scroll_up(&mut self, n: usize) {
-        let width = self.grid.width();
         let (top, bottom) = self.effective_scroll_region();
 
         if top == 0 && bottom == self.grid.height().saturating_sub(1) {
@@ -278,20 +277,7 @@ impl TerminalBuffer {
             }
         }
 
-        for y in (top + n)..=bottom {
-            for x in 0..width {
-                if let Some(cell) = self.grid.get(x, y).cloned() {
-                    let _ = self.grid.set(x, y - n, cell);
-                }
-            }
-        }
-
-        let clear_start = if bottom + 1 >= n { bottom + 1 - n } else { top };
-        for y in clear_start..=bottom {
-            for x in 0..width {
-                let _ = self.grid.set(x, y, Cell::default());
-            }
-        }
+        self.grid.scroll_rows_up(top, bottom, n);
 
         if top == 0 && bottom == self.grid.height().saturating_sub(1) {
             self.cursor_y = self.cursor_y.saturating_sub(n);

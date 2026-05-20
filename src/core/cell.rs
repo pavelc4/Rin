@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::sync::Arc;
 
 /// RGB Color representation
@@ -111,7 +112,7 @@ pub struct Cell {
     pub hyperlink: Option<Hyperlink>,
     /// Zero-width combining characters attached to this cell
     #[serde(skip)]
-    pub zerowidth: Vec<char>,
+    pub zerowidth: SmallVec<[char; 2]>,
     /// True if this is a wide (double-width) character
     pub wide: bool,
     /// True if this is a spacer cell following a wide character
@@ -124,7 +125,7 @@ impl Default for Cell {
             character: ' ',
             style: CellStyle::default(),
             hyperlink: None,
-            zerowidth: Vec::new(),
+            zerowidth: SmallVec::new(),
             wide: false,
             wide_spacer: false,
         }
@@ -137,7 +138,7 @@ impl Cell {
             character,
             style: CellStyle::default(),
             hyperlink: None,
-            zerowidth: Vec::new(),
+            zerowidth: SmallVec::new(),
             wide: false,
             wide_spacer: false,
         }

@@ -109,4 +109,41 @@ impl Grid {
     pub fn has_dirty_rows(&self) -> bool {
         self.dirty_rows.iter().any(|&d| d)
     }
+
+    pub fn scroll_rows_up(&mut self, top: usize, bottom: usize, n: usize) {
+        let w = self.width;
+        let count = (bottom - top + 1 - n) * w;
+
+        let tmp: Vec<Cell> = self.cells[(top + n) * w..][..count].to_vec();
+        self.cells[top * w..][..count].clone_from_slice(&tmp);
+
+        self.cells[(bottom + 1 - n) * w..(bottom + 1) * w].fill(Cell::default());
+
+        for y in top..=bottom {
+            self.dirty_rows[y] = true;
+        }
+    }
+
+    pub fn scroll_rows_down(&mut self, top: usize, bottom: usize, n: usize) {
+        let w = self.width;
+        let count = (bottom - top + 1 - n) * w;
+
+        let tmp: Vec<Cell> = self.cells[top * w..][..count].to_vec();
+        self.cells[(top + n) * w..][..count].clone_from_slice(&tmp);
+
+        self.cells[top * w..(top + n) * w].fill(Cell::default());
+
+        for y in top..=bottom {
+            self.dirty_rows[y] = true;
+        }
+    }
+
+    pub fn row_mut(&mut self, y: usize) -> Option<&mut [Cell]> {
+        if y >= self.height {
+            return None;
+        }
+        let start = y * self.width;
+        let end = start + self.width;
+        Some(&mut self.cells[start..end])
+    }
 }
