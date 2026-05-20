@@ -22,6 +22,8 @@ fn ensure_logger() {
 
 type EngineHandle = jlong;
 
+const SESSION_ERR: jint = -1;
+
 static SESSIONS: OnceLock<Arc<RwLock<HashMap<EngineHandle, TerminalSession>>>> = OnceLock::new();
 static NEXT_HANDLE: AtomicI64 = AtomicI64::new(1);
 
@@ -222,10 +224,10 @@ pub extern "system" fn Java_com_rin_RinLib_write(
         Ok(_) => 0,
         Err(e) => {
             log::error!("Failed to write to PTY: {}", e);
-            -1
+            SESSION_ERR
         }
     })
-    .unwrap_or(-2)
+    .unwrap_or(SESSION_ERR)
 }
 
 #[unsafe(no_mangle)]
