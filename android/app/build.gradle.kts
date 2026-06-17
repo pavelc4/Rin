@@ -63,7 +63,7 @@ dependencies {
 
     // Core
     implementation("androidx.core:core-ktx:1.18.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
