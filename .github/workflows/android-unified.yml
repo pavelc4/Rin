@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout Rin Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Environment Variables
         run: |
@@ -62,7 +62,7 @@ jobs:
 
       - name: Checkout Keystore Repository
         if: env.HAS_PRIVATE_TOKEN == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pavelc4/keystores
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
