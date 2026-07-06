@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout Rin Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Environment Variables
         run: |
@@ -59,7 +59,7 @@ jobs:
               --data-urlencode "text=$MESSAGE"
 
       - name: Checkout Keystore Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pavelc4/keystores
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
