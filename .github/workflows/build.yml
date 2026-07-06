@@ -91,7 +91,7 @@ jobs:
           mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Rin-debug-${{ env.SHORT_SHA }}.apk
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Rin-debug-${{ env.SHORT_SHA }}
           path: android/app/build/outputs/apk/debug/Rin-debug-${{ env.SHORT_SHA }}.apk
