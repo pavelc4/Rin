@@ -133,7 +133,7 @@ jobs:
           mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}
           path: android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk

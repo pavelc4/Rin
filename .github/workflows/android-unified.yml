@@ -130,14 +130,14 @@ jobs:
           fi
 
       - name: Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}
           path: android/app/build/outputs/apk/debug/Rin-v${{ env.VERSION }}-debug-${{ env.SHORT_SHA }}.apk
 
       - name: Upload Release APK Artifact
         if: env.HAS_PRIVATE_TOKEN == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}
           path: android/app/build/outputs/apk/release/Rin-v${{ env.VERSION }}-release-${{ env.SHORT_SHA }}.apk
